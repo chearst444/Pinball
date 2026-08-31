@@ -1,565 +1,570 @@
-// KEYFALL — a gravity keyhole puzzle built on Matter.js and Kenney's
-// rolling-ball asset pack (recolored to the game's teal / magenta / yellow / ink palette).
+(() => {
+  'use strict';
 
-(function () {
-  "use strict";
-
-  const { Engine, World, Bodies, Body, Composite, Events, Vertices, Bounds } = Matter;
-
-  // Polyfill for older browsers lacking CanvasRenderingContext2D.roundRect
-  if (!CanvasRenderingContext2D.prototype.roundRect) {
-    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
-      this.moveTo(x + r, y);
-      this.arcTo(x + w, y, x + w, y + h, r);
-      this.arcTo(x + w, y + h, x, y + h, r);
-      this.arcTo(x, y + h, x, y, r);
-      this.arcTo(x, y, x + w, y, r);
-      this.closePath();
-      return this;
-    };
-  }
-
-  // ---------------------------------------------------------------------
-  // Constants & level data
-  // ---------------------------------------------------------------------
-
-  const W = 440;
-  const H = 760;
-  const WALL_T = 16;
-  const BALL_R = 13;
-  const SPAWN = { x: 220, y: 40 };
-
-  const ARM_W = 36;   // portrait footprint; rotated 90deg it becomes the landscape footprint
-  const ARM_H = 70;
-
-  // [x, y, initialAngle] — initialAngle 0 = portrait (tall/narrow), PI/2 = landscape (wide/flat)
-  const ARM_DATA = [
-    [140, 90, 0],
-    [300, 90, Math.PI / 2],
-    [90, 250, Math.PI / 2],
-    [220, 250, 0],
-    [350, 250, Math.PI / 2],
-    [140, 410, 0],
-    [300, 410, Math.PI / 2],
-    [90, 570, Math.PI / 2],
-    [220, 570, 0],
-    [350, 570, Math.PI / 2],
-    [240, 690, 0],
-  ];
-
-  // [x, y, ledgeWidth, number]
-  const KEYHOLE_DATA = [
-    [220, 170, 100, 1],
-    [120, 330, 100, 2],
-    [320, 490, 100, 3],
-    [180, 650, 100, 4],
-    [300, 730, 100, 5],
-  ];
-
-  const LEDGE_H = 14;
-  const KEY_SENSOR_R = 22;
-
-  // ---------------------------------------------------------------------
-  // DOM & canvas
-  // ---------------------------------------------------------------------
-
-  const canvas = document.getElementById("board");
-  const ctx = canvas.getContext("2d");
-  const dropBtn = document.getElementById("dropBtn");
-  const resetBtn = document.getElementById("resetBtn");
-  const nudgeBtn = document.getElementById("nudgeBtn");
-  const attemptsLine = document.getElementById("attemptsLine");
-  const statusLine = document.getElementById("statusLine");
-  const keyholeTrack = document.getElementById("keyholeTrack");
-  const bonusSlot = document.getElementById("bonusSlot");
-  const bonusLocked = document.getElementById("bonusStarLocked");
-  const bonusUnlocked = document.getElementById("bonusStarUnlocked");
-
-  // ---------------------------------------------------------------------
-  // Asset loading
-  // ---------------------------------------------------------------------
-
-  const ASSET_NAMES = ["ball", "platform", "platform_narrow", "pivot_arm", "keyhole", "star"];
-  const NUMBER_NAMES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => "number_" + n);
-  const images = {};
-
-  function loadImage(name) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve();
-      img.onerror = () => resolve(); // fail soft — draw a placeholder shape instead
-      img.src = "assets/" + name + ".png";
-      images[name] = img;
-    });
-  }
-
-  const allAssets = ASSET_NAMES.concat(NUMBER_NAMES);
-  Promise.all(allAssets.map(loadImage)).then(start);
-
-  // ---------------------------------------------------------------------
-  // Audio (tiny WebAudio synth, no asset files needed)
-  // ---------------------------------------------------------------------
-
-  let actx = null;
-  function tone(freq, dur, type, vol, delay) {
-    try {
-      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-      const t0 = actx.currentTime + (delay || 0);
-      const osc = actx.createOscillator();
-      const gain = actx.createGain();
-      osc.type = type || "sine";
-      osc.frequency.setValueAtTime(freq, t0);
-      gain.gain.setValueAtTime(0, t0);
-      gain.gain.linearRampToValueAtTime(vol || 0.15, t0 + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-      osc.connect(gain);
-      gain.connect(actx.destination);
-      osc.start(t0);
-      osc.stop(t0 + dur + 0.02);
-    } catch (e) { /* audio not available — ignore */ }
-  }
-
-  const sfx = {
-    click: () => tone(520, 0.05, "square", 0.08),
-    key: (n) => { tone(660 + n * 40, 0.14, "sine", 0.16); },
-    win: () => { tone(660, 0.14, "sine", 0.18, 0); tone(880, 0.14, "sine", 0.18, 0.12); tone(1180, 0.22, "sine", 0.2, 0.24); },
-    lose: () => { tone(220, 0.22, "sawtooth", 0.12, 0); tone(140, 0.28, "sawtooth", 0.12, 0.1); },
-    nudge: () => tone(300, 0.08, "triangle", 0.1),
+  // ---------------------------------------------------------------
+  // Palette
+  // ---------------------------------------------------------------
+  const COLOR = {
+    magenta: '#D840B8',
+    teal: '#60D0C0',
+    yellow: '#F8E060',
+    ink: '#101018',
+    inkLine: '#05050a',
+    paper: '#e9e6da',
   };
 
-  // ---------------------------------------------------------------------
-  // Physics world
-  // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // Board geometry
+  // ---------------------------------------------------------------
+  const BOARD_W = 440;
+  const BOARD_H = 760;
+  const WALL = 14;
+  const DIVIDER_X = 372;      // wall separating the plunger lane from the play field
+  const DIVIDER_TOP_Y = 220;  // gap above the divider the launched ball must clear
+  const LANE_CENTER_X = 401;
+  const LANE_FLOOR_Y = 750;
 
+  const BUMPERS = [
+    { x: 132, y: 176, n: 3, color: 'magenta' },
+    { x: 292, y: 176, n: 5, color: 'teal' },
+    { x: 212, y: 252, n: 7, color: 'magenta' },
+    { x: 118, y: 344, n: 2, color: 'teal' },
+    { x: 302, y: 344, n: 4, color: 'magenta' },
+    { x: 212, y: 430, n: 9, color: 'teal' },
+  ];
+  const BUMPER_RADIUS = 25;
+
+  const RAMPS = [
+    { x: 60, y: 74, w: 24, h: 96, angle: -0.6 },
+    { x: 377, y: 123, w: 210, h: 14, angle: 1.106, vector: true }, // lane-entry guide: deflects a launched ball off the top of the plunger lane into the field
+    { x: 150, y: 560, w: 34, h: 170, angle: -0.22 },
+    { x: 300, y: 640, w: 30, h: 130, angle: 0.35 },
+  ];
+
+  const TARGET_STEP = 2200;
+  const TARGET_BASE = 2800;
+
+  // ---------------------------------------------------------------
+  // DOM
+  // ---------------------------------------------------------------
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const scoreValueEl = document.getElementById('scoreValue');
+  const targetFillEl = document.getElementById('targetFill');
+  const targetLabelEl = document.getElementById('targetLabel');
+  const ballCountEl = document.getElementById('ballCount');
+  const hintEl = document.getElementById('hintLine');
+  const vaultEl = document.getElementById('vault');
+  const vaultGlowEl = document.getElementById('vaultGlow');
+
+  // ---------------------------------------------------------------
+  // Asset loading
+  // ---------------------------------------------------------------
+  const IMG_SOURCES = {
+    ball: 'assets/ball.png',
+    platform: 'assets/platform.png',
+    platformNarrow: 'assets/platform_narrow.png',
+    n0: 'assets/number_0.png', n1: 'assets/number_1.png', n2: 'assets/number_2.png',
+    n3: 'assets/number_3.png', n4: 'assets/number_4.png', n5: 'assets/number_5.png',
+    n6: 'assets/number_6.png', n7: 'assets/number_7.png', n8: 'assets/number_8.png',
+    n9: 'assets/number_9.png',
+  };
+
+  function loadImages(sources) {
+    const entries = Object.entries(sources);
+    const images = {};
+    return Promise.all(entries.map(([key, src]) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => { images[key] = img; resolve(); };
+      img.onerror = () => resolve(); // fail soft; missing art shouldn't block the game
+      img.src = src;
+    }))).then(() => images);
+  }
+
+  // Recolors a sprite's opaque pixels to an exact hex color, keeping its alpha shape.
+  function tint(img, hex) {
+    if (!img) return null;
+    const off = document.createElement('canvas');
+    off.width = img.naturalWidth || img.width;
+    off.height = img.naturalHeight || img.height;
+    const octx = off.getContext('2d');
+    octx.drawImage(img, 0, 0);
+    octx.globalCompositeOperation = 'source-atop';
+    octx.fillStyle = hex;
+    octx.fillRect(0, 0, off.width, off.height);
+    return off;
+  }
+
+  // ---------------------------------------------------------------
+  // Matter.js setup
+  // ---------------------------------------------------------------
+  const { Bodies, Body, Events, Runner, Engine, World } = Matter;
   const engine = Engine.create();
-  engine.world.gravity.y = 1.05;
-
+  engine.gravity.y = 0.85;
   const world = engine.world;
 
   function wall(x, y, w, h) {
-    return Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.05, restitution: 0.3, label: "wall" });
+    return Bodies.rectangle(x, y, w, h, { isStatic: true, restitution: 0.4, friction: 0.05 });
   }
 
-  Composite.add(world, [
-    wall(WALL_T / 2, H / 2, WALL_T, H * 2),
-    wall(W - WALL_T / 2, H / 2, WALL_T, H * 2),
-    wall(W / 2, -20, W, 40), // soft ceiling so the ball can't be flicked out the top
-  ]);
+  const boundaries = [
+    wall(WALL / 2, BOARD_H / 2, WALL, BOARD_H * 2),                     // left
+    wall(BOARD_W - WALL / 2, BOARD_H / 2, WALL, BOARD_H * 2),           // right
+    wall(BOARD_W / 2, WALL / 2, BOARD_W, WALL),                        // top
+    wall(DIVIDER_X, (DIVIDER_TOP_Y + BOARD_H) / 2, 8, BOARD_H - DIVIDER_TOP_Y), // lane divider
+    wall(LANE_CENTER_X, LANE_FLOOR_Y, 54, 10),                          // lane floor
+  ];
+  World.add(world, boundaries);
 
-  // Pivot arms
-  const arms = ARM_DATA.map(([x, y, angle], i) => {
-    const body = Bodies.rectangle(x, y, ARM_W, ARM_H, {
+  const bumperBodies = BUMPERS.map((b) => {
+    const body = Bodies.circle(b.x, b.y, BUMPER_RADIUS, {
       isStatic: true,
-      angle,
-      friction: 0.02,
+      restitution: 1.05,
+      label: 'bumper',
+    });
+    body.bumperData = { ...b, radius: BUMPER_RADIUS, flashAt: -1000, lastHit: -1000 };
+    return body;
+  });
+  World.add(world, bumperBodies);
+
+  const rampBodies = RAMPS.map((r) => {
+    const body = Bodies.rectangle(r.x, r.y, r.w, r.h, {
+      isStatic: true,
+      angle: r.angle,
       restitution: 0.35,
-      chamfer: { radius: 4 },
-      label: "arm",
+      friction: 0.02,
+      chamfer: { radius: 6 },
     });
-    return { id: i, body, tweening: false, from: angle, to: angle, start: 0, dur: 190 };
+    body.rampData = r;
+    return body;
   });
-  Composite.add(world, arms.map((a) => a.body));
+  World.add(world, rampBodies);
 
-  // Keyhole ledges + sensors
-  const keyholes = KEYHOLE_DATA.map(([x, y, w, num], i) => {
-    const ledge = Bodies.rectangle(x, y + LEDGE_H / 2, w, LEDGE_H, {
-      isStatic: true,
-      friction: 0.03,
-      restitution: 0.25,
-      chamfer: { radius: 3 },
-      label: "ledge",
-    });
-    const sensor = Bodies.circle(x, y - 4, KEY_SENSOR_R, {
-      isStatic: true,
-      isSensor: true,
-      label: "keyhole",
-    });
-    sensor.keyholeIndex = i;
-    Composite.add(world, [ledge, sensor]);
-    return { index: i, x, y, num, ledge, sensor, hit: false };
+  const BALL_RADIUS = 11;
+  const ball = Bodies.circle(LANE_CENTER_X, LANE_FLOOR_Y - 20, BALL_RADIUS, {
+    restitution: 0.62,
+    friction: 0.04,
+    frictionAir: 0.0009,
+    density: 0.022,
+    label: 'ball',
+  });
+  World.add(world, ball);
+
+  const runner = Runner.create();
+  Runner.run(runner, engine);
+
+  // A hard speed cap on the ball keeps a full-power plunge from tunnelling
+  // through the thin board walls in a single physics step.
+  const MAX_BALL_SPEED = 22;
+  Events.on(engine, 'afterUpdate', () => {
+    const v = ball.velocity;
+    const speed = Math.hypot(v.x, v.y);
+    if (speed > MAX_BALL_SPEED) {
+      Body.setVelocity(ball, { x: (v.x / speed) * MAX_BALL_SPEED, y: (v.y / speed) * MAX_BALL_SPEED });
+    }
   });
 
-  // Ball
-  const ball = Bodies.circle(SPAWN.x, SPAWN.y, BALL_R, {
-    isStatic: true,
-    friction: 0.02,
-    frictionAir: 0.0015,
-    restitution: 0.42,
-    density: 0.004,
-    label: "ball",
-  });
-  Composite.add(world, ball);
-
-  // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------
   // Game state
-  // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------
+  const state = {
+    score: 0,
+    prevThreshold: 0,
+    target: TARGET_BASE,
+    ballsLaunched: 0,
+    ballInLane: true,
+    stuckFrames: 0,
+    vaultBusy: false,
+    popups: [],
+    plunger: { pulling: false, pull: 0, spaceHeld: false, startY: 0 },
+    images: null,
+  };
 
-  let state = "ready"; // ready | falling | ended
-  let attempt = 0;
-  let allCleared = false;
-  const particles = [];
-
-  function buildKeyholeHud() {
-    keyholeTrack.innerHTML = "";
-    keyholes.forEach((k) => {
-      const chip = document.createElement("div");
-      chip.className = "keyhole-chip";
-      chip.textContent = String(k.num);
-      chip.id = "chip-" + k.index;
-      keyholeTrack.appendChild(chip);
-    });
-  }
-  buildKeyholeHud();
-
-  function setStatus(msg, cls) {
-    statusLine.textContent = msg;
-    statusLine.className = "status" + (cls ? " " + cls : "");
-  }
-
-  function resetKeyholesVisual() {
-    keyholes.forEach((k) => {
-      k.hit = false;
-      const chip = document.getElementById("chip-" + k.index);
-      if (chip) chip.classList.remove("hit");
-    });
+  function updateScoreHUD() {
+    scoreValueEl.textContent = state.score.toLocaleString();
+    const span = state.target - state.prevThreshold;
+    const progress = span > 0 ? (state.score - state.prevThreshold) / span : 1;
+    targetFillEl.style.width = `${Math.max(0, Math.min(100, progress * 100))}%`;
+    targetLabelEl.textContent = `Target ${state.target.toLocaleString()}`;
+    ballCountEl.textContent = `Balls launched: ${state.ballsLaunched}`;
+    vaultGlowEl.style.opacity = String(0.4 + 0.6 * Math.max(0, Math.min(1, progress)));
   }
 
-  function resetBonusVisual() {
-    bonusSlot.classList.remove("unlocked");
-    bonusLocked.hidden = false;
-    bonusUnlocked.hidden = true;
+  function addScore(amount, x, y, color) {
+    state.score += amount;
+    state.popups.push({ x, y, text: `+${amount}`, alpha: 1, vy: -1.3, color });
+    updateScoreHUD();
+    if (!state.vaultBusy && state.score >= state.target) {
+      openVault();
+    }
   }
 
-  function spawnParticles(x, y, color) {
-    for (let i = 0; i < 14; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const spd = 1 + Math.random() * 2.5;
-      particles.push({
-        x, y,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd - 1,
-        life: 1,
-        color,
+  function openVault() {
+    state.vaultBusy = true;
+    vaultEl.classList.add('open');
+    hintEl.textContent = 'Vault open! Star reward collected.';
+    hintEl.classList.add('flash');
+    setTimeout(() => {
+      vaultEl.classList.remove('open');
+      state.prevThreshold = state.target;
+      state.target += TARGET_STEP;
+      state.vaultBusy = false;
+      hintEl.classList.remove('flash');
+      hintEl.textContent = 'Drag the plunger down, then release to launch the ball.';
+      updateScoreHUD();
+    }, 2600);
+  }
+
+  // ---------------------------------------------------------------
+  // Bumper collisions
+  // ---------------------------------------------------------------
+  Events.on(engine, 'collisionStart', (evt) => {
+    for (const pair of evt.pairs) {
+      const a = pair.bodyA, b = pair.bodyB;
+      const bumper = a.label === 'bumper' ? a : (b.label === 'bumper' ? b : null);
+      const ballBody = a.label === 'ball' ? a : (b.label === 'ball' ? b : null);
+      if (!bumper || !ballBody) continue;
+
+      const now = performance.now();
+      if (now - bumper.bumperData.lastHit < 90) continue; // debounce a single physics contact
+      bumper.bumperData.lastHit = now;
+      bumper.bumperData.flashAt = now;
+
+      const value = bumper.bumperData.n * 100;
+      addScore(value, ballBody.position.x, ballBody.position.y, COLOR[bumper.bumperData.color]);
+
+      // extra "kick" so the bounce feels punchy, on top of normal restitution
+      const dx = ballBody.position.x - bumper.position.x;
+      const dy = ballBody.position.y - bumper.position.y;
+      const dist = Math.max(1, Math.hypot(dx, dy));
+      const kick = 4.5;
+      Body.setVelocity(ballBody, {
+        x: ballBody.velocity.x + (dx / dist) * kick,
+        y: ballBody.velocity.y + (dy / dist) * kick,
       });
     }
-  }
-
-  function releaseBall() {
-    if (state !== "ready") return;
-    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
-    Body.setStatic(ball, false);
-    Body.setVelocity(ball, { x: 0, y: 0 });
-    state = "falling";
-    attempt += 1;
-    attemptsLine.textContent = "Attempt " + attempt;
-    setStatus("Falling… click the magenta arms to steer the ball!");
-    dropBtn.disabled = true;
-    dropBtn.textContent = "Falling…";
-  }
-
-  function respawnBall() {
-    Body.setStatic(ball, true);
-    Body.setPosition(ball, SPAWN);
-    Body.setVelocity(ball, { x: 0, y: 0 });
-    Body.setAngularVelocity(ball, 0);
-  }
-
-  function endRound(won) {
-    state = "ended";
-    dropBtn.disabled = false;
-    dropBtn.textContent = "Drop Again";
-    if (won) {
-      setStatus("🎉 Ball cleared every keyhole — great run!", "win");
-      sfx.win();
-    } else {
-      const hitCount = keyholes.filter((k) => k.hit).length;
-      setStatus("Ball exited the bottom — " + hitCount + "/" + keyholes.length + " keyholes triggered. Try again!", "lose");
-      sfx.lose();
-    }
-  }
-
-  function fullReset() {
-    arms.forEach((a, i) => {
-      a.tweening = false;
-      Body.setAngle(a.body, ARM_DATA[i][2]);
-    });
-    resetKeyholesVisual();
-    resetBonusVisual();
-    respawnBall();
-    allCleared = false;
-    attempt = 0;
-    state = "ready";
-    dropBtn.disabled = false;
-    dropBtn.textContent = "Drop Ball";
-    attemptsLine.textContent = "Attempt 1";
-    setStatus("Drop the ball, then click the magenta arms to steer it.");
-  }
-
-  // Buttons
-  dropBtn.addEventListener("click", () => {
-    if (state === "ended") {
-      resetKeyholesVisual();
-      resetBonusVisual();
-      allCleared = false;
-      respawnBall();
-      state = "ready";
-      releaseBall();
-    } else {
-      releaseBall();
-    }
   });
 
-  resetBtn.addEventListener("click", fullReset);
+  // ---------------------------------------------------------------
+  // Plunger input
+  // ---------------------------------------------------------------
+  const MAX_PULL = 120;
 
-  nudgeBtn.addEventListener("click", () => {
-    if (state !== "falling") return;
-    sfx.nudge();
-    Body.applyForce(ball, ball.position, {
-      x: (Math.random() - 0.5) * 0.006,
-      y: -0.003,
-    });
-  });
-
-  // ---------------------------------------------------------------------
-  // Arm rotation on click / tap
-  // ---------------------------------------------------------------------
-
-  function canvasPointFromEvent(evt) {
+  function canvasPos(evt) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-    const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height),
+      x: (evt.clientX - rect.left) * scaleX,
+      y: (evt.clientY - rect.top) * scaleY,
     };
   }
 
-  function startArmTween(arm) {
-    arm.tweening = true;
-    arm.from = arm.body.angle;
-    arm.to = arm.body.angle + Math.PI / 2;
-    arm.start = performance.now();
+  function beginPull(y) {
+    if (!state.ballInLane || state.plunger.pulling) return;
+    state.plunger.pulling = true;
+    state.plunger.startY = y;
+    Body.setStatic(ball, true);
   }
 
-  function handlePointer(evt) {
-    const p = canvasPointFromEvent(evt);
-    for (const arm of arms) {
-      if (arm.tweening) continue;
-      if (!Bounds.contains(arm.body.bounds, p)) continue;
-      if (Vertices.contains(arm.body.vertices, p)) {
-        startArmTween(arm);
-        sfx.click();
-        evt.preventDefault();
-        break;
-      }
+  function updatePull(y) {
+    if (!state.plunger.pulling) return;
+    const raw = y - state.plunger.startY;
+    state.plunger.pull = Math.max(0, Math.min(MAX_PULL, raw));
+    Body.setPosition(ball, { x: LANE_CENTER_X, y: (LANE_FLOOR_Y - 20) + state.plunger.pull * 0.5 });
+  }
+
+  function release() {
+    if (!state.plunger.pulling) return;
+    state.plunger.pulling = false;
+    Body.setStatic(ball, false);
+    const power = 9.5 + (state.plunger.pull / MAX_PULL) * 9.5;
+    Body.setVelocity(ball, { x: (Math.random() - 0.5) * 0.6, y: -power });
+    state.plunger.pull = 0;
+    state.ballInLane = false;
+    state.ballsLaunched += 1;
+    updateScoreHUD();
+    hintEl.textContent = 'Ball launched!';
+    setTimeout(() => {
+      if (!state.vaultBusy) hintEl.textContent = 'Drag the plunger down, then release to launch the ball.';
+    }, 1400);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = canvasPos(e);
+    if (p.x > DIVIDER_X - 10) {
+      canvas.setPointerCapture(e.pointerId);
+      beginPull(p.y);
     }
-  }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (state.plunger.pulling) updatePull(canvasPos(e).y);
+  });
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
 
-  canvas.addEventListener("click", handlePointer);
-  canvas.addEventListener("touchstart", handlePointer, { passive: false });
-
-  function easeInOutCubic(t) {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  }
-
-  function updateArmTweens(now) {
-    for (const arm of arms) {
-      if (!arm.tweening) continue;
-      const t = Math.min(1, (now - arm.start) / arm.dur);
-      const eased = easeInOutCubic(t);
-      Body.setAngle(arm.body, arm.from + (arm.to - arm.from) * eased);
-      if (t >= 1) {
-        arm.tweening = false;
-        Body.setAngle(arm.body, arm.to);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // Collisions — keyhole triggers
-  // ---------------------------------------------------------------------
-
-  Events.on(engine, "collisionStart", (evt) => {
-    for (const pair of evt.pairs) {
-      const a = pair.bodyA, b = pair.bodyB;
-      const keySensor = a.label === "keyhole" ? a : b.label === "keyhole" ? b : null;
-      const other = keySensor === a ? b : a;
-      if (keySensor && other.label === "ball") {
-        const k = keyholes[keySensor.keyholeIndex];
-        if (!k.hit) {
-          k.hit = true;
-          const chip = document.getElementById("chip-" + k.index);
-          if (chip) chip.classList.add("hit");
-          spawnParticles(k.x, k.y, "#f8e060");
-          sfx.key(k.index);
-          const hitCount = keyholes.filter((kk) => kk.hit).length;
-          if (hitCount < keyholes.length) {
-            setStatus("Keyhole " + k.num + " triggered! (" + hitCount + "/" + keyholes.length + ")");
-          } else if (!allCleared) {
-            allCleared = true;
-            bonusSlot.classList.add("unlocked");
-            bonusLocked.hidden = true;
-            bonusUnlocked.hidden = false;
-            setStatus("✨ All keyholes cleared — bonus star unlocked!", "win");
-            spawnParticles(W / 2, H / 2, "#f8e060");
-          }
-        }
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!state.plunger.spaceHeld && state.ballInLane) {
+        state.plunger.spaceHeld = true;
+        beginPull(0);
+        state.plunger.startY = -1000; // let the rAF loop drive the pull amount instead
       }
     }
   });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+      state.plunger.spaceHeld = false;
+      release();
+    }
+  });
 
-  // ---------------------------------------------------------------------
-  // Main loop
-  // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // Drain / respawn
+  // ---------------------------------------------------------------
+  function respawnBall() {
+    Body.setPosition(ball, { x: LANE_CENTER_X, y: LANE_FLOOR_Y - 20 });
+    Body.setVelocity(ball, { x: 0, y: 0 });
+    Body.setAngularVelocity(ball, 0);
+    state.ballInLane = true;
+    state.stuckFrames = 0;
+  }
 
-  function drawSprite(img, x, y, w, h, angle) {
+  const STUCK_LIMIT = 90; // ~1.5s at 60fps wedged against static geometry counts as lost
+
+  function checkDrain() {
+    if (ball.position.y > BOARD_H + 60) {
+      respawnBall();
+      return;
+    }
+    if (state.ballInLane) return;
+
+    const speed = Math.hypot(ball.velocity.x, ball.velocity.y);
+    if (ball.position.x > DIVIDER_X + 4 && ball.position.y > 640 && speed < 0.6) {
+      // ball fell back into the lane without draining — ready to relaunch
+      state.ballInLane = true;
+      state.stuckFrames = 0;
+    } else if (speed < 0.15) {
+      // guards against the rare pocket where the ball wedges motionless
+      // between static geometry and never triggers a normal drain
+      state.stuckFrames += 1;
+      if (state.stuckFrames > STUCK_LIMIT) respawnBall();
+    } else {
+      state.stuckFrames = 0;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------
+  function drawBackground() {
+    ctx.fillStyle = COLOR.ink;
+    ctx.fillRect(0, 0, BOARD_W, BOARD_H);
     ctx.save();
-    ctx.translate(x, y);
-    if (angle) ctx.rotate(angle);
-    if (img && img.complete && img.naturalWidth) {
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    for (let y = 20; y < BOARD_H; y += 40) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(BOARD_W, y); ctx.stroke();
     }
     ctx.restore();
   }
 
-  function drawFallbackRect(x, y, w, h, angle, fill, stroke) {
-    ctx.save();
-    ctx.translate(x, y);
-    if (angle) ctx.rotate(angle);
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(-w / 2, -h / 2, w, h, 6);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+  function drawBoundaries() {
+    ctx.fillStyle = COLOR.inkLine;
+    ctx.fillRect(0, 0, BOARD_W, WALL);
+    ctx.fillRect(0, 0, WALL, BOARD_H);
+    ctx.fillRect(BOARD_W - WALL, 0, WALL, BOARD_H);
+    // lane divider
+    ctx.fillRect(DIVIDER_X - 4, DIVIDER_TOP_Y, 8, BOARD_H - DIVIDER_TOP_Y);
+    ctx.fillStyle = COLOR.yellow;
+    ctx.fillRect(DIVIDER_X - 4, DIVIDER_TOP_Y, 8, 4);
+    // lane floor
+    ctx.fillStyle = COLOR.inkLine;
+    ctx.fillRect(LANE_CENTER_X - 27, LANE_FLOOR_Y - 5, 54, 10);
   }
 
-  function render() {
-    ctx.clearRect(0, 0, W, H);
+  let tintedYellowWide = null;
+  let tintedYellowNarrow = null;
+  let tintedNumbersWhite = null;
 
-    // background
-    ctx.fillStyle = "#101018";
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#05050a";
-
-    // faint grid dots for depth
-    ctx.fillStyle = "#1a1a26";
-    for (let gx = 30; gx < W; gx += 30) {
-      for (let gy = 30; gy < H; gy += 30) {
-        ctx.fillRect(gx, gy, 2, 2);
-      }
-    }
-
-    // walls
-    drawFallbackRect(WALL_T / 2, H / 2, WALL_T, H, 0, "#0d3f3a", "#05050a");
-    drawFallbackRect(W - WALL_T / 2, H / 2, WALL_T, H, 0, "#0d3f3a", "#05050a");
-
-    // ledges (platforms)
-    keyholes.forEach((k) => {
-      const body = k.ledge;
-      const w = KEYHOLE_DATA[k.index][2];
-      if (images.platform_narrow && images.platform_narrow.complete) {
-        drawSprite(images.platform_narrow, body.position.x, body.position.y, w, LEDGE_H * 2.2, body.angle);
+  function drawRamps() {
+    for (const body of rampBodies) {
+      const r = body.rampData;
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      ctx.rotate(r.angle);
+      const sprite = r.vector ? null : (r.w >= 30 ? tintedYellowWide : tintedYellowNarrow);
+      if (sprite) {
+        ctx.drawImage(sprite, -r.w / 2, -r.h / 2, r.w, r.h);
       } else {
-        drawFallbackRect(body.position.x, body.position.y, w, LEDGE_H, body.angle, "#60d0c0", "#05050a");
-      }
-    });
-
-    // pivot arms
-    arms.forEach((arm) => {
-      drawSprite(images.pivot_arm, arm.body.position.x, arm.body.position.y, ARM_W, ARM_H, arm.body.angle);
-      if (!images.pivot_arm || !images.pivot_arm.complete) {
-        drawFallbackRect(arm.body.position.x, arm.body.position.y, ARM_W, ARM_H, arm.body.angle, "#d840b8", "#05050a");
-      }
-    });
-
-    // keyholes + numbers
-    keyholes.forEach((k) => {
-      const s = k.sensor;
-      const d = KEY_SENSOR_R * 2;
-      const glow = k.hit;
-      if (glow) {
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.fillStyle = "#f8e060";
+        ctx.fillStyle = COLOR.yellow;
+        const rad = 6;
         ctx.beginPath();
-        ctx.arc(s.position.x, s.position.y, d * 0.75, 0, Math.PI * 2);
+        ctx.roundRect(-r.w / 2, -r.h / 2, r.w, r.h, rad);
         ctx.fill();
-        ctx.restore();
       }
-      drawSprite(images.keyhole, s.position.x, s.position.y, d, d, 0);
-      if (!images.keyhole || !images.keyhole.complete) {
-        ctx.save();
-        ctx.fillStyle = glow ? "#f8e060" : "#8a7a30";
-        ctx.strokeStyle = "#05050a";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(s.position.x, s.position.y, d / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
-      const numImg = images["number_" + k.num];
-      drawSprite(numImg, s.position.x, s.position.y + 1, 16, 24, 0);
-    });
-
-    // particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.05;
-      p.life -= 0.025;
-      if (p.life <= 0) { particles.splice(i, 1); continue; }
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, p.life);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-      ctx.restore();
-    }
-
-    // ball
-    drawSprite(images.ball, ball.position.x, ball.position.y, BALL_R * 2.2, BALL_R * 2.2, ball.angle);
-    if (!images.ball || !images.ball.complete) {
-      ctx.save();
-      ctx.fillStyle = "#f8e060";
-      ctx.strokeStyle = "#05050a";
+      ctx.strokeStyle = 'rgba(16,16,24,0.55)';
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(ball.position.x, ball.position.y, BALL_R, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      ctx.strokeRect(-r.w / 2, -r.h / 2, r.w, r.h);
       ctx.restore();
     }
+  }
 
-    // exit chute marker at bottom
+  function drawBumpers(now) {
+    for (const body of bumperBodies) {
+      const d = body.bumperData;
+      const sinceHit = now - d.flashAt;
+      const pulse = sinceHit >= 0 && sinceHit < 220 ? 1 + 0.28 * (1 - sinceHit / 220) : 1;
+      const glow = sinceHit >= 0 && sinceHit < 260 ? 1 - sinceHit / 260 : 0;
+      const radius = d.radius * pulse;
+      const base = COLOR[d.color];
+
+      ctx.save();
+      ctx.translate(body.position.x, body.position.y);
+
+      if (glow > 0) {
+        ctx.save();
+        ctx.shadowColor = base;
+        ctx.shadowBlur = 24 * glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fillStyle = base;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fillStyle = base;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = COLOR.inkLine;
+      ctx.stroke();
+
+      // highlight arc for a glossy "bouncy" look
+      ctx.beginPath();
+      ctx.arc(-radius * 0.28, -radius * 0.32, radius * 0.55, Math.PI * 1.1, Math.PI * 1.85);
+      ctx.strokeStyle = glow > 0 ? '#ffffff' : 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = radius * 0.22;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // number label
+      const spriteKey = 'n' + d.n;
+      const sprite = tintedNumbersWhite && tintedNumbersWhite[spriteKey];
+      if (sprite) {
+        const targetH = radius * 0.95;
+        const scale = targetH / sprite.height;
+        const w = sprite.width * scale;
+        const h = sprite.height * scale;
+        ctx.drawImage(sprite, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.round(radius)}px "Trebuchet MS", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(d.n), 0, 1);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawPlunger() {
+    const knobY = (LANE_FLOOR_Y - 20) + state.plunger.pull * 0.5 + BALL_RADIUS + 6;
     ctx.save();
-    ctx.strokeStyle = "#60d0c0";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = COLOR.yellow;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    const coils = 6;
+    const top = knobY;
+    const bottom = LANE_FLOOR_Y - 8;
     ctx.beginPath();
-    ctx.moveTo(0, H - 4);
-    ctx.lineTo(W, H - 4);
+    for (let i = 0; i <= coils; i++) {
+      const t = i / coils;
+      const y = top + (bottom - top) * t;
+      const xOff = (i % 2 === 0 ? -7 : 7);
+      if (i === 0) ctx.moveTo(LANE_CENTER_X, y);
+      else ctx.lineTo(LANE_CENTER_X + xOff, y);
+    }
     ctx.stroke();
+    ctx.fillStyle = COLOR.yellow;
+    ctx.beginPath();
+    ctx.roundRect(LANE_CENTER_X - 16, bottom - 4, 32, 10, 4);
+    ctx.fill();
     ctx.restore();
   }
 
-  function tick(now) {
-    updateArmTweens(now);
-    Engine.update(engine, 1000 / 60);
+  function drawBall(images) {
+    ctx.save();
+    ctx.translate(ball.position.x, ball.position.y);
+    ctx.rotate(ball.angle);
+    if (images && images.ball) {
+      const s = BALL_RADIUS * 2.1;
+      ctx.drawImage(images.ball, -s / 2, -s / 2, s, s);
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = COLOR.paper;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
-    if (state === "falling" && ball.position.y - BALL_R > H) {
-      endRound(allCleared);
+  function drawPopups() {
+    for (const p of state.popups) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.alpha);
+      ctx.fillStyle = p.color || COLOR.yellow;
+      ctx.font = 'bold 18px "Trebuchet MS", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = COLOR.inkLine;
+      ctx.lineWidth = 3;
+      ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  function updatePopups() {
+    state.popups.forEach((p) => { p.y += p.vy; p.alpha -= 0.018; });
+    state.popups = state.popups.filter((p) => p.alpha > 0);
+  }
+
+  function frame() {
+    const now = performance.now();
+
+    if (state.plunger.spaceHeld) {
+      state.plunger.pull = Math.min(MAX_PULL, state.plunger.pull + 3.4);
+      Body.setPosition(ball, { x: LANE_CENTER_X, y: (LANE_FLOOR_Y - 20) + state.plunger.pull * 0.5 });
     }
 
-    render();
-    requestAnimationFrame(tick);
+    checkDrain();
+    updatePopups();
+
+    drawBackground();
+    drawRamps();
+    drawBoundaries();
+    drawBumpers(now);
+    drawPlunger();
+    drawBall(state.images);
+    drawPopups();
+
+    requestAnimationFrame(frame);
   }
 
-  function start() {
-    setStatus("Drop the ball, then click the magenta arms to steer it.");
-    requestAnimationFrame(tick);
-  }
+  // ---------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------
+  loadImages(IMG_SOURCES).then((images) => {
+    state.images = images;
+    tintedYellowWide = tint(images.platform, COLOR.yellow);
+    tintedYellowNarrow = tint(images.platformNarrow, COLOR.yellow);
+    tintedNumbersWhite = {};
+    for (let i = 0; i <= 9; i++) {
+      tintedNumbersWhite['n' + i] = tint(images['n' + i], '#ffffff');
+    }
+    updateScoreHUD();
+    requestAnimationFrame(frame);
+  });
 })();
