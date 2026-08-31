@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Vault Bumper</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-icon" src="assets/star.png" alt="">
+        <div>
+          <h1>VAULT BUMPER</h1>
+          <p class="tagline">Rack up points, crack the vault</p>
+        </div>
+      </div>
+      <div class="scorecard" id="scorecard">
+        <div class="score-row">
+          <span class="score-label">Score</span>
+          <span class="score-value" id="scoreValue">0</span>
+        </div>
+        <div class="target-track">
+          <div class="target-fill" id="targetFill"></div>
+        </div>
+        <div class="target-row">
+          <span id="targetLabel">Target 3000</span>
+          <span id="ballCount">Balls launched: 0</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="playarea">
+      <div class="stage">
+        <canvas id="board" width="440" height="760"></canvas>
+        <div class="vault" id="vault" aria-label="Vault door">
+          <div class="vault-body" aria-hidden="true"></div>
+          <div class="vault-glow" id="vaultGlow"></div>
+          <img class="vault-keyhole" src="assets/keyhole.png" alt="">
+          <div class="vault-doors">
+            <div class="vault-door-leaf left" id="doorLeft"></div>
+            <div class="vault-door-leaf right" id="doorRight"></div>
+          </div>
+          <img class="vault-star" id="vaultStar" src="assets/star.png" alt="Reward star">
+          <div class="vault-banner">Vault open!</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <p class="hint" id="hintLine">Drag the plunger down, then release to launch the ball.</p>
+      </div>
+    </main>
+
+    <aside class="legend">
+      <h2>How to play</h2>
+      <ul>
+        <li><span class="swatch swatch-magenta"></span> / <span class="swatch swatch-teal"></span> Numbered bumpers alternate Magenta and Teal &mdash; each hit adds its number &times; 100 to your score.</li>
+        <li><span class="swatch swatch-yellow"></span> Yellow ramps and platforms redirect the ball around the board.</li>
+        <li>Pull back the plunger in the lane on the right and let go to launch a new ball.</li>
+        <li>Reach the target score to pop the vault door and reveal the star reward &mdash; the target climbs each time it opens.</li>
+      </ul>
+    </aside>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

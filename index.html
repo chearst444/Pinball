@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pinball</title>
+<style>
+  :root {
+    --ink: #101018;
+    --ink-soft: #1c1c28;
+    --ink-line: #05050a;
+    --teal: #60d0c0;
+    --magenta: #d840b8;
+    --yellow: #f8e060;
+    --paper: #e9e6da;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+    min-height: 100%;
+    min-height: 100dvh;
+  }
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 20px 56px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 34px;
+    letter-spacing: 4px;
+    color: var(--yellow);
+    text-shadow: 2px 2px 0 var(--ink-line);
+  }
+  .tagline {
+    margin: 8px 0 0;
+    color: var(--teal);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+  }
+  a.card {
+    display: block;
+    background: var(--ink-soft);
+    border: 3px solid var(--ink-line);
+    border-radius: 14px;
+    padding: 20px;
+    text-decoration: none;
+    color: var(--paper);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+    box-shadow: 0 6px 0 var(--ink-line);
+  }
+  a.card:hover {
+    transform: translateY(-3px);
+    border-color: var(--yellow);
+  }
+  a.card:active { transform: translateY(0); }
+  .card h2 {
+    margin: 0 0 6px;
+    font-size: 19px;
+    letter-spacing: 1.5px;
+    color: var(--yellow);
+  }
+  .card p {
+    margin: 0;
+    font-size: 13px;
+    color: #c8c6ba;
+    line-height: 1.4;
+  }
+  .swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    font-size: 11px;
+    color: #6c6c80;
+  }
+  footer a { color: var(--teal); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>PINBALL</h1>
+      <p class="tagline">Three small physics &amp; puzzle games</p>
+    </header>
+    <div class="grid">
+      <a class="card" href="vault-bumper/">
+        <h2><span class="swatch" style="background:var(--magenta)"></span>Vault Bumper</h2>
+        <p>Rack up points, crack the vault. A numbered-bumper pinball board — hit a bumper for its number &times; 100, reach the target score to pop the vault door.</p>
+      </a>
+      <a class="card" href="turnkey/">
+        <h2><span class="swatch" style="background:var(--teal)"></span>Turnkey</h2>
+        <p>Unlock every keyhole. A Lights Out&ndash;style puzzle where each click toggles a keyhole and its orthogonal neighbors.</p>
+      </a>
+      <a class="card" href="keyfall/">
+        <h2><span class="swatch" style="background:var(--yellow)"></span>Keyfall</h2>
+        <p>A gravity keyhole puzzle &mdash; rotate a pivot arm and let physics carry the ball into place.</p>
+      </a>
+    </div>
+    <footer>
+      <a href="https://github.com/chearst444/Pinball">chearst444/Pinball</a> on GitHub
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,367 @@
+:root {
+  --ink: #101018;
+  --ink-soft: #1c1c28;
+  --ink-line: #05050a;
+  --teal: #60d0c0;
+  --magenta: #d840b8;
+  --yellow: #f8e060;
+  --paper: #e9e6da;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+  min-height: 100%;
+  min-height: 100dvh;
+}
+
+.app {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 18px 16px 40px;
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  grid-template-areas:
+    "top top"
+    "play legend";
+  gap: 18px;
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 3px solid var(--ink-line);
+  padding-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 0 var(--ink-line));
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 3px;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 var(--ink-line);
+}
+
+.tagline {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--teal);
+  letter-spacing: 1px;
+}
+
+/* ---- corner score display ---- */
+.scorecard {
+  background: var(--ink-soft);
+  border: 3px solid var(--ink-line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 200px;
+}
+
+.score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #8888a0;
+  text-transform: uppercase;
+}
+
+.score-value {
+  font-size: 30px;
+  font-weight: bold;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 var(--ink-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.target-track {
+  margin-top: 6px;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--ink-line);
+  overflow: hidden;
+  border: 1px solid #000;
+}
+
+.target-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--magenta), var(--teal));
+  transition: width 0.25s ease;
+}
+
+.target-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #8888a0;
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+}
+
+.playarea {
+  grid-area: play;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.stage {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+#board {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 440px;
+  /* JS (sizeBoard) sets an inline width/height that also fits the viewport's
+     available height, so the plunger lane at the bottom of the board is
+     never pushed off-screen on short mobile viewports; these rules are just
+     the pre-JS / no-JS fallback. */
+  border-radius: 14px;
+  border: 4px solid var(--ink-line);
+  background: var(--ink);
+  box-shadow: 0 10px 0 var(--ink-line), inset 0 0 40px rgba(0,0,0,0.6);
+  touch-action: none;
+  cursor: grab;
+}
+
+#board:active { cursor: grabbing; }
+
+/* ---- vault door ---- */
+.vault {
+  --vault-size: 148px;
+  position: relative;
+  width: var(--vault-size);
+  height: var(--vault-size);
+  background: var(--ink-soft);
+  border: 3px solid var(--yellow);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--ink-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vault-body {
+  position: absolute;
+  width: calc(var(--vault-size) * 108 / 148);
+  height: calc(var(--vault-size) * 108 / 148);
+  image-rendering: pixelated;
+  /* recolor the block-lock sprite to exact Ink using it as a mask */
+  -webkit-mask-image: url("../assets/vault_door.png");
+  mask-image: url("../assets/vault_door.png");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  background: #06060a;
+  opacity: 0.9;
+}
+
+.vault-glow {
+  position: absolute;
+  width: calc(var(--vault-size) * 70 / 148);
+  height: calc(var(--vault-size) * 70 / 148);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(216,64,184,0.85) 0%, rgba(216,64,184,0.35) 45%, rgba(216,64,184,0) 72%);
+  filter: blur(1px);
+  animation: keyholePulse 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes keyholePulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.vault-keyhole {
+  position: relative;
+  width: calc(var(--vault-size) * 30 / 148);
+  height: calc(var(--vault-size) * 30 / 148);
+  z-index: 3;
+  filter: drop-shadow(0 0 6px var(--magenta)) drop-shadow(0 0 2px #000);
+}
+
+.vault-doors {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  pointer-events: none;
+}
+
+.vault-door-leaf {
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(180deg, #202030, var(--ink) 60%, #06060a);
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.vault-door-leaf.left { border-right: 2px solid var(--ink-line); transform: translateX(0); }
+.vault-door-leaf.right { border-left: 2px solid var(--ink-line); transform: translateX(0); }
+
+.vault.open .vault-door-leaf.left { transform: translateX(-102%); }
+.vault.open .vault-door-leaf.right { transform: translateX(102%); }
+
+.vault-star {
+  position: absolute;
+  width: calc(var(--vault-size) * 46 / 148);
+  height: calc(var(--vault-size) * 46 / 148);
+  z-index: 2;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 10px var(--yellow));
+  transform: scale(0) rotate(-40deg);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-delay: 0.35s;
+}
+
+.vault.open .vault-star {
+  transform: scale(1) rotate(0deg);
+  animation: starTwinkle 1.8s ease-in-out 0.9s infinite;
+}
+
+@keyframes starTwinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.12) rotate(6deg); }
+}
+
+.vault-banner {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--yellow);
+  text-transform: uppercase;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.vault.open .vault-banner { opacity: 1; }
+
+.controls {
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: #8888a0;
+  min-height: 18px;
+}
+
+.hint.flash { color: var(--yellow); font-weight: bold; }
+
+.legend {
+  grid-area: legend;
+  background: var(--ink-soft);
+  border: 3px solid var(--ink-line);
+  border-radius: 12px;
+  padding: 14px;
+  height: fit-content;
+}
+
+.legend h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: var(--teal);
+  letter-spacing: 1px;
+}
+
+.legend ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12.5px;
+  color: #c8c6ba;
+  line-height: 1.4;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-line);
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.swatch-teal { background: var(--teal); }
+.swatch-magenta { background: var(--magenta); }
+.swatch-yellow { background: var(--yellow); border-radius: 3px; }
+
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "top"
+      "play"
+      "legend";
+  }
+}
+
+/* Short viewports (most phones in portrait): trim the header chrome so the
+   tall 440x760 board has more vertical room to size itself into before the
+   plunger lane at the bottom of the board would run off-screen. */
+@media (max-height: 760px) {
+  .app { padding: 10px 12px 16px; gap: 10px; }
+  .topbar { padding-bottom: 8px; gap: 10px; }
+  .brand-icon { width: 28px; height: 28px; }
+  .brand h1 { font-size: 18px; letter-spacing: 2px; }
+  .tagline { display: none; }
+  .scorecard { padding: 6px 10px; min-width: 0; }
+  .score-value { font-size: 22px; }
+  .target-row { font-size: 9.5px; }
+  .stage { gap: 6px; }
+  .vault { --vault-size: 100px; }
+  .hint { font-size: 11px; min-height: 14px; }
+  .legend { display: none; }
+}
