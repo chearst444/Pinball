@@ -3,55 +3,74 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Keyfall</title>
+<title>Turnkey</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-icon" src="assets/key.png" alt="">
+        <span class="brand-icon" aria-hidden="true"></span>
         <div>
-          <h1>KEYFALL</h1>
-          <p class="tagline">A gravity keyhole puzzle</p>
+          <h1>TURNKEY</h1>
+          <p class="tagline">Unlock every keyhole. Each click turns its neighbors too.</p>
         </div>
       </div>
-      <div class="bonus" id="bonusSlot" title="Bonus star — unlocks when every keyhole is triggered">
-        <img id="bonusStarLocked" src="assets/star_outline.png" alt="Locked bonus star">
-        <img id="bonusStarUnlocked" src="assets/star.png" alt="Bonus star unlocked" hidden>
+      <div class="trophy" id="trophySlot" title="Solve the grid to earn the star">
+        <img id="trophyLocked" src="assets/star_outline.png" alt="Not yet solved">
+        <img id="trophyUnlocked" src="assets/star.png" alt="Solved" hidden>
       </div>
     </header>
 
     <main class="playarea">
       <div class="hud">
-        <div class="keyhole-track" id="keyholeTrack" aria-label="Keyhole progress"></div>
-        <div class="status" id="statusLine">Drop the ball, then click the magenta arms to steer it.</div>
+        <div class="stat">
+          <span class="stat-label">Moves</span>
+          <span class="stat-value" id="movesValue">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Best</span>
+          <span class="stat-value" id="bestValue">&mdash;</span>
+        </div>
+        <div class="size-select" role="group" aria-label="Grid size">
+          <button class="size-btn" data-size="4">4&times;4</button>
+          <button class="size-btn" data-size="5">5&times;5</button>
+        </div>
       </div>
 
-      <div class="stage">
-        <canvas id="board" width="440" height="760"></canvas>
+      <p class="status" id="statusLine">Click a keyhole to turn it &mdash; and its neighbors &mdash; toward Yellow.</p>
+
+      <div class="board-frame">
+        <div class="board" id="board" role="group" aria-label="Puzzle grid"></div>
       </div>
 
       <div class="controls">
-        <button id="dropBtn" class="btn primary">Drop Ball</button>
-        <button id="resetBtn" class="btn">Reset Level</button>
-        <button id="nudgeBtn" class="btn ghost" title="Give the ball a small shove if it gets stuck">Nudge</button>
-        <span class="attempts" id="attemptsLine">Attempt 1</span>
+        <button id="newBtn" class="btn primary">New Puzzle</button>
+        <button id="resetBtn" class="btn ghost">Reset Moves</button>
       </div>
     </main>
 
     <aside class="legend">
       <h2>How to play</h2>
       <ul>
-        <li><span class="swatch swatch-teal"></span> Teal platforms and ledges are fixed — they just shape the fall.</li>
-        <li><span class="swatch swatch-magenta"></span> Magenta pivot arms rotate 90&deg; on click or tap, redirecting the ball.</li>
-        <li><span class="swatch swatch-yellow"></span> Yellow numbered keyholes must <em>all</em> be triggered in one continuous drop.</li>
-        <li><span class="swatch swatch-star"></span> Clear every keyhole before the ball exits the bottom to unlock the bonus star.</li>
+        <li><span class="swatch swatch-ink"></span> Ink keyholes are still locked.</li>
+        <li><span class="swatch swatch-yellow"></span> Yellow keyholes are unlocked.</li>
+        <li><span class="swatch swatch-magenta"></span> Magenta is the flash of a keyhole mid-turn &mdash; hover a button to preview which cells it will flip.</li>
+        <li><span class="swatch swatch-teal"></span> Teal frames the board and marks the rotation cue on hover.</li>
+        <li>Get every keyhole to Yellow in as few clicks as possible.</li>
       </ul>
     </aside>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+  <div class="solved-overlay" id="solvedOverlay" hidden>
+    <div class="solved-card">
+      <div class="burst" id="starBurst" aria-hidden="true"></div>
+      <h2>Solved!</h2>
+      <p id="solvedLine">Unlocked in 0 moves.</p>
+      <button class="btn primary" id="playAgainBtn">Play Again</button>
+    </div>
+  </div>
+
   <script src="js/game.js"></script>
 </body>
 </html>
