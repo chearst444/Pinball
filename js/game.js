@@ -131,19 +131,25 @@
   // Physics world
   // ---------------------------------------------------------------------
 
-  const engine = Engine.create();
+  const engine = Engine.create({
+    // Extra solver iterations improve stability when a rotating arm sweeps
+    // through the ball, which otherwise risks a numerical blow-up.
+    positionIterations: 10,
+    velocityIterations: 8,
+  });
   engine.world.gravity.y = 1.05;
 
   const world = engine.world;
 
   function wall(x, y, w, h) {
-    return Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.05, restitution: 0.3, label: "wall" });
+    return Bodies.rectangle(x, y, w, h, { isStatic: true, friction: 0.05, restitution: 0.2, label: "wall" });
   }
 
+  // Walls span only the playfield height (not into negative y) so a ball that gets
+  // knocked upward can never wedge into a wall/ceiling corner pocket.
   Composite.add(world, [
-    wall(WALL_T / 2, H / 2, WALL_T, H * 2),
-    wall(W - WALL_T / 2, H / 2, WALL_T, H * 2),
-    wall(W / 2, -20, W, 40), // soft ceiling so the ball can't be flicked out the top
+    wall(WALL_T / 2, H / 2, WALL_T, H),
+    wall(W - WALL_T / 2, H / 2, WALL_T, H),
   ]);
 
   // Pivot arms
@@ -152,7 +158,7 @@
       isStatic: true,
       angle,
       friction: 0.02,
-      restitution: 0.35,
+      restitution: 0.2,
       chamfer: { radius: 4 },
       label: "arm",
     });
@@ -180,15 +186,28 @@
   });
 
   // Ball
-  const ball = Bodies.circle(SPAWN.x, SPAWN.y, BALL_R, {
-    isStatic: true,
-    friction: 0.02,
-    frictionAir: 0.0015,
-    restitution: 0.42,
-    density: 0.004,
-    label: "ball",
-  });
+  function createBall(x, y, isStatic) {
+    return Bodies.circle(x, y, BALL_R, {
+      isStatic,
+      friction: 0.02,
+      frictionAir: 0.0015,
+      restitution: 0.42,
+      density: 0.004,
+      label: "ball",
+    });
+  }
+  let ball = createBall(SPAWN.x, SPAWN.y, true);
   Composite.add(world, ball);
+
+  // Swaps in a brand-new ball body at (x, y). Matter's Body.setPosition() applies a
+  // *relative* delta, so it can never repair a body whose position/velocity has
+  // already gone non-finite — recreating the body is the only reliable fix.
+  function replaceBall(x, y, isStatic) {
+    Composite.remove(world, ball);
+    ball = createBall(x, y, isStatic);
+    Composite.add(world, ball);
+    return ball;
+  }
 
   // ---------------------------------------------------------------------
   // Game state
@@ -258,14 +277,12 @@
   }
 
   function respawnBall() {
-    Body.setStatic(ball, true);
-    Body.setPosition(ball, SPAWN);
-    Body.setVelocity(ball, { x: 0, y: 0 });
-    Body.setAngularVelocity(ball, 0);
+    replaceBall(SPAWN.x, SPAWN.y, true);
   }
 
   function endRound(won) {
     state = "ended";
+    Body.setStatic(ball, true); // freeze it off-stage instead of falling forever
     dropBtn.disabled = false;
     dropBtn.textContent = "Drop Again";
     if (won) {
@@ -546,15 +563,51 @@
     ctx.restore();
   }
 
-  function tick(now) {
-    updateArmTweens(now);
-    Engine.update(engine, 1000 / 60);
+  const MAX_BALL_SPEED = 16;
+  let lastSafe = { x: SPAWN.x, y: SPAWN.y };
 
-    if (state === "falling" && ball.position.y - BALL_R > H) {
-      endRound(allCleared);
+  function clampBall() {
+    // A rapidly-rotated arm can occasionally drive the solver into a numerical
+    // blow-up (NaN/Infinity position or velocity). Recover instantly rather than
+    // letting a corrupted ball state soft-lock the game.
+    const p = ball.position, v = ball.velocity;
+    const finite = isFinite(p.x) && isFinite(p.y) && isFinite(v.x) && isFinite(v.y);
+    if (!finite) {
+      replaceBall(lastSafe.x, lastSafe.y, false);
+      return;
     }
 
-    render();
+    // Rotating an arm underneath the ball can impart a large corrective impulse.
+    // Clamp speed and forbid travel back above the spawn line so the ball can
+    // never rocket off-stage or wedge itself into a corner.
+    const speed = Math.hypot(v.x, v.y);
+    if (speed > MAX_BALL_SPEED) {
+      const scale = MAX_BALL_SPEED / speed;
+      Body.setVelocity(ball, { x: v.x * scale, y: v.y * scale });
+    }
+    if (state === "falling" && p.y < BALL_R + 4 && v.y < 0) {
+      Body.setPosition(ball, { x: p.x, y: BALL_R + 4 });
+      Body.setVelocity(ball, { x: v.x, y: 0 });
+    }
+
+    lastSafe = { x: ball.position.x, y: ball.position.y };
+  }
+
+  function tick(now) {
+    try {
+      updateArmTweens(now);
+      Engine.update(engine, 1000 / 60);
+      clampBall();
+
+      if (state === "falling" && ball.position.y - BALL_R > H) {
+        endRound(allCleared);
+      }
+
+      render();
+    } catch (e) {
+      // A render/physics hiccup should never permanently freeze the game loop.
+      console.error("Keyfall frame error:", e);
+    }
     requestAnimationFrame(tick);
   }
 
