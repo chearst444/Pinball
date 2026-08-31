@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Keyfall</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-icon" src="assets/key.png" alt="">
+        <div>
+          <h1>KEYFALL</h1>
+          <p class="tagline">A gravity keyhole puzzle</p>
+        </div>
+      </div>
+      <div class="bonus" id="bonusSlot" title="Bonus star — unlocks when every keyhole is triggered">
+        <img id="bonusStarLocked" src="assets/star_outline.png" alt="Locked bonus star">
+        <img id="bonusStarUnlocked" src="assets/star.png" alt="Bonus star unlocked" hidden>
+      </div>
+    </header>
+
+    <main class="playarea">
+      <div class="hud">
+        <div class="keyhole-track" id="keyholeTrack" aria-label="Keyhole progress"></div>
+        <div class="status" id="statusLine">Drop the ball, then click the magenta arms to steer it.</div>
+      </div>
+
+      <div class="stage">
+        <canvas id="board" width="440" height="760"></canvas>
+      </div>
+
+      <div class="controls">
+        <button id="dropBtn" class="btn primary">Drop Ball</button>
+        <button id="resetBtn" class="btn">Reset Level</button>
+        <button id="nudgeBtn" class="btn ghost" title="Give the ball a small shove if it gets stuck">Nudge</button>
+        <span class="attempts" id="attemptsLine">Attempt 1</span>
+      </div>
+    </main>
+
+    <aside class="legend">
+      <h2>How to play</h2>
+      <ul>
+        <li><span class="swatch swatch-teal"></span> Teal platforms and ledges are fixed — they just shape the fall.</li>
+        <li><span class="swatch swatch-magenta"></span> Magenta pivot arms rotate 90&deg; on click or tap, redirecting the ball.</li>
+        <li><span class="swatch swatch-yellow"></span> Yellow numbered keyholes must <em>all</em> be triggered in one continuous drop.</li>
+        <li><span class="swatch swatch-star"></span> Clear every keyhole before the ball exits the bottom to unlock the bonus star.</li>
+      </ul>
+    </aside>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
