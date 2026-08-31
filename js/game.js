@@ -58,6 +58,56 @@
   const vaultGlowEl = document.getElementById('vaultGlow');
 
   // ---------------------------------------------------------------
+  // Responsive board sizing
+  // ---------------------------------------------------------------
+  // The board's CSS default just scales its 440x760 (tall) aspect ratio to
+  // the container's *width*, with no regard for viewport height. On a phone
+  // that stretches the board taller than the screen, pushing the plunger
+  // lane at the bottom of the board below the visible viewport. Measure the
+  // page's actual overflow (if any) against the viewport and shrink the
+  // board by exactly that much, so header + board + hint always fit on
+  // screen together and nothing renders off-screen.
+  let sizeBoardQueued = false;
+
+  function sizeBoard() {
+    sizeBoardQueued = false;
+
+    // Clear any previous inline size so we measure the CSS-driven natural
+    // layout first (also lets the board grow back if the viewport grows,
+    // e.g. rotating back to landscape or the mobile URL bar collapsing).
+    canvas.style.width = '';
+    canvas.style.height = '';
+
+    const viewportH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    const rect = canvas.getBoundingClientRect();
+    // Only care whether the board's own bottom edge (where the plunger
+    // lane lives) clears the viewport — content below the board, like the
+    // "how to play" legend, is fine to be off-screen/scrollable.
+    const overflow = rect.bottom - viewportH;
+    if (overflow <= 0) return; // the board already fits
+
+    const targetHeight = Math.max(240, rect.height - overflow - 8); // small safety margin
+    const targetWidth = targetHeight * (BOARD_W / BOARD_H);
+
+    canvas.style.width = `${targetWidth}px`;
+    canvas.style.height = `${targetHeight}px`;
+  }
+
+  function queueSizeBoard() {
+    if (sizeBoardQueued) return;
+    sizeBoardQueued = true;
+    requestAnimationFrame(sizeBoard);
+  }
+
+  sizeBoard();
+  window.addEventListener('load', queueSizeBoard);
+  window.addEventListener('resize', queueSizeBoard);
+  window.addEventListener('orientationchange', queueSizeBoard);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', queueSizeBoard);
+  }
+
+  // ---------------------------------------------------------------
   // Asset loading
   // ---------------------------------------------------------------
   const IMG_SOURCES = {
