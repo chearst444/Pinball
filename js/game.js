@@ -23,6 +23,16 @@
   const DIVIDER_TOP_Y = 220;  // gap above the divider the launched ball must clear
   const LANE_CENTER_X = 401;
   const LANE_FLOOR_Y = 750;
+  // The ball's resting/drag-start Y in the plunger lane. A full plunger pull
+  // drags the ball down by MAX_PULL * 0.5 (= 60px, see release()/updatePull()
+  // below) — this needs to stay at least that far above the lane floor's
+  // collision body (LANE_FLOOR_Y, a 10px-tall static wall) plus the ball's
+  // own radius, or a firm pull drags the ball's physics body down *into*
+  // the floor. On release, Matter's overlap correction then fights (and can
+  // fully cancel or reverse) the upward launch velocity we just set — the
+  // ball just sinks/falls through instead of launching. 90px of clearance
+  // leaves a safety margin above the 60px max pull depth.
+  const PLUNGER_REST_Y = LANE_FLOOR_Y - 90;
 
   const BUMPERS = [
     { x: 132, y: 176, n: 3, color: 'magenta' },
@@ -191,7 +201,7 @@
   World.add(world, rampBodies);
 
   const BALL_RADIUS = 11;
-  const ball = Bodies.circle(LANE_CENTER_X, LANE_FLOOR_Y - 20, BALL_RADIUS, {
+  const ball = Bodies.circle(LANE_CENTER_X, PLUNGER_REST_Y, BALL_RADIUS, {
     restitution: 0.62,
     friction: 0.04,
     frictionAir: 0.0009,
@@ -321,7 +331,7 @@
     if (!state.plunger.pulling) return;
     const raw = y - state.plunger.startY;
     state.plunger.pull = Math.max(0, Math.min(MAX_PULL, raw));
-    Body.setPosition(ball, { x: LANE_CENTER_X, y: (LANE_FLOOR_Y - 20) + state.plunger.pull * 0.5 });
+    Body.setPosition(ball, { x: LANE_CENTER_X, y: PLUNGER_REST_Y + state.plunger.pull * 0.5 });
   }
 
   function release() {
@@ -374,7 +384,7 @@
   // Drain / respawn
   // ---------------------------------------------------------------
   function respawnBall() {
-    Body.setPosition(ball, { x: LANE_CENTER_X, y: LANE_FLOOR_Y - 20 });
+    Body.setPosition(ball, { x: LANE_CENTER_X, y: PLUNGER_REST_Y });
     Body.setVelocity(ball, { x: 0, y: 0 });
     Body.setAngularVelocity(ball, 0);
     state.ballInLane = true;
@@ -521,7 +531,7 @@
   }
 
   function drawPlunger() {
-    const knobY = (LANE_FLOOR_Y - 20) + state.plunger.pull * 0.5 + BALL_RADIUS + 6;
+    const knobY = PLUNGER_REST_Y + state.plunger.pull * 0.5 + BALL_RADIUS + 6;
     ctx.save();
     ctx.strokeStyle = COLOR.yellow;
     ctx.lineWidth = 5;
@@ -586,7 +596,7 @@
 
     if (state.plunger.spaceHeld) {
       state.plunger.pull = Math.min(MAX_PULL, state.plunger.pull + 3.4);
-      Body.setPosition(ball, { x: LANE_CENTER_X, y: (LANE_FLOOR_Y - 20) + state.plunger.pull * 0.5 });
+      Body.setPosition(ball, { x: LANE_CENTER_X, y: PLUNGER_REST_Y + state.plunger.pull * 0.5 });
     }
 
     checkDrain();
