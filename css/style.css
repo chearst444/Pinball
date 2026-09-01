@@ -3,6 +3,7 @@
   --yellow: #f8e060;
   --magenta: #d840b8;
   --teal: #60d0c0;
+  --orange: #f2994a;
 
   --page-bg: #08080d;
   --panel-bg: #16161f;
@@ -307,6 +308,7 @@ html, body {
 .swatch-yellow { background: var(--yellow); }
 .swatch-magenta { background: var(--magenta); }
 .swatch-teal { background: var(--teal); }
+.swatch-orange { background: var(--orange); }
 
 /* ---------- solved overlay ---------- */
 

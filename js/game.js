@@ -33,6 +33,7 @@
   var COLOR_YELLOW = "#f8e060";
   var COLOR_MAGENTA = "#d840b8";
   var COLOR_TEAL = "#60d0c0";
+  var COLOR_ORANGE = "#f2994a"; // side paddles — deliberately not flipper-yellow
   var COLOR_TABLE_BG = "#0c0c14";
 
   // ---------- logical table geometry (fixed virtual units) ----------
@@ -48,9 +49,6 @@
   var UP_SPEED = 16; // rad/s, flipper snapping up
   var DOWN_SPEED = 10; // rad/s, flipper falling back
 
-  var SIDE_FLIPPER_AMP = 0.55; // rad, half-sweep of each auto-flipping side paddle
-  var SIDE_FLIPPER_SPEED = 2.6; // rad/s, angular frequency of the sweep
-
   // ---------- state ----------
   var score = 0;
   var ballsLeft = 3;
@@ -58,7 +56,6 @@
   var state = "idle"; // 'idle' | 'live' | 'over'
   var ball = null;
   var lastT = null;
-  var simTime = 0;
 
   var activators = { left: new Set(), right: new Set() };
   var pointerSides = {}; // pointerId -> 'left' | 'right'
@@ -156,18 +153,33 @@
     };
   }
 
-  // small paddles mounted on the side walls that sweep back and forth on
-  // their own, in two rows — extra chaos the player doesn't control
-  function makeSideFlipper(pivot, base, phase) {
-    return { pivot: pivot, base: base, phase: phase, length: 55, radius: 9, angle: base, angVel: 0 };
+  // Small paddles mounted on the side walls, two rows per side. They sit
+  // tucked flat against the wall until the matching flipper is pressed —
+  // pressing left fires the left flipper AND both left-side paddles — so
+  // there's no new control to learn, and nothing moves on its own.
+  function makeSidePaddle(side, pivot) {
+    var rest = side === "left" ? 1.2 : Math.PI - 1.2;
+    var active = side === "left" ? -0.1 : Math.PI + 0.1;
+    return {
+      side: side,
+      pivot: pivot,
+      length: 55,
+      radius: 9,
+      angle: rest,
+      restAngle: rest,
+      activeAngle: active,
+      pressed: false,
+      angVel: 0,
+      isSidePaddle: true,
+    };
   }
 
   function buildSideFlippers() {
     return [
-      makeSideFlipper({ x: 20, y: 260 }, 0, 0),
-      makeSideFlipper({ x: 380, y: 260 }, Math.PI, 1.0),
-      makeSideFlipper({ x: 20, y: 480 }, 0, 2.1),
-      makeSideFlipper({ x: 380, y: 480 }, Math.PI, 3.4),
+      makeSidePaddle("left", { x: 20, y: 260 }),
+      makeSidePaddle("right", { x: 380, y: 260 }),
+      makeSidePaddle("left", { x: 20, y: 480 }),
+      makeSidePaddle("right", { x: 380, y: 480 }),
     ];
   }
 
@@ -335,7 +347,11 @@
   // ---------- physics ----------
 
   function updateFlipperPhysics(dt) {
-    [flippers.left, flippers.right].forEach(function (f) {
+    // side paddles fire in lockstep with the main flipper on their side —
+    // no separate control, and they sit still until told to move
+    sideFlippers.forEach(function (sf) { sf.pressed = flippers[sf.side].pressed; });
+
+    [flippers.left, flippers.right].concat(sideFlippers).forEach(function (f) {
       var target = f.pressed ? f.activeAngle : f.restAngle;
       var maxSpeed = f.pressed ? UP_SPEED : DOWN_SPEED;
       var diff = target - f.angle;
@@ -350,15 +366,6 @@
     });
     leftFlipperBtn.classList.toggle("is-pressed", flippers.left.pressed);
     rightFlipperBtn.classList.toggle("is-pressed", flippers.right.pressed);
-  }
-
-  function updateSideFlippers(dt) {
-    simTime += dt;
-    sideFlippers.forEach(function (f) {
-      var w = SIDE_FLIPPER_SPEED;
-      f.angle = f.base + SIDE_FLIPPER_AMP * Math.sin(w * simTime + f.phase);
-      f.angVel = SIDE_FLIPPER_AMP * w * Math.cos(w * simTime + f.phase);
-    });
   }
 
   function physicsStep(dt) {
@@ -421,7 +428,6 @@
 
   function update(dt) {
     updateFlipperPhysics(dt);
-    updateSideFlippers(dt);
     if (state === "live" && ball) {
       var sdt = dt / SUBSTEPS;
       for (var i = 0; i < SUBSTEPS; i++) physicsStep(sdt);
@@ -488,7 +494,7 @@
         x: f.pivot.x + f.length * Math.cos(f.angle),
         y: f.pivot.y + f.length * Math.sin(f.angle),
       };
-      ctx.strokeStyle = COLOR_YELLOW;
+      ctx.strokeStyle = f.isSidePaddle ? COLOR_ORANGE : COLOR_YELLOW;
       ctx.lineWidth = f.radius * 2;
       ctx.beginPath();
       ctx.moveTo(f.pivot.x, f.pivot.y);
