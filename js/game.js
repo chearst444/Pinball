@@ -37,7 +37,7 @@
 
   // ---------- logical table geometry (fixed virtual units) ----------
   var W = 400;
-  var H = 650;
+  var H = 720;
   var BALL_R = 8;
   var GRAVITY = 1400; // px/s^2
   var MAX_SPEED = 1100;
@@ -48,6 +48,9 @@
   var UP_SPEED = 16; // rad/s, flipper snapping up
   var DOWN_SPEED = 10; // rad/s, flipper falling back
 
+  var SIDE_FLIPPER_AMP = 0.55; // rad, half-sweep of each auto-flipping side paddle
+  var SIDE_FLIPPER_SPEED = 2.6; // rad/s, angular frequency of the sweep
+
   // ---------- state ----------
   var score = 0;
   var ballsLeft = 3;
@@ -55,13 +58,16 @@
   var state = "idle"; // 'idle' | 'live' | 'over'
   var ball = null;
   var lastT = null;
+  var simTime = 0;
 
   var activators = { left: new Set(), right: new Set() };
   var pointerSides = {}; // pointerId -> 'left' | 'right'
 
   var walls = buildWalls();
   var bumpers = buildBumpers();
+  var pegs = buildPegs();
   var flippers = buildFlippers();
+  var sideFlippers = buildSideFlippers();
 
   // ---------- geometry helpers ----------
 
@@ -84,7 +90,7 @@
     }
 
     // left outer wall
-    wall(20, 60, 20, 520);
+    wall(20, 60, 20, 590);
     // top-left rounded corner
     arcSegments(w, 60, 60, 40, Math.PI, Math.PI * 1.5, 6);
     // top wall
@@ -92,24 +98,38 @@
     // top-right rounded corner
     arcSegments(w, 340, 60, 40, Math.PI * 1.5, Math.PI * 2, 6);
     // right outer wall
-    wall(380, 60, 380, 520);
+    wall(380, 60, 380, 590);
 
     // funnels guiding a dropping ball toward each flipper
-    wall(20, 520, 75, 558);
-    wall(380, 520, 325, 558);
+    wall(20, 590, 75, 628);
+    wall(380, 590, 325, 628);
 
     // slingshot kickers just above each flipper — extra bouncy, score points
-    wall(68, 455, 120, 505, 1.6, "sling");
-    wall(332, 455, 280, 505, 1.6, "sling");
+    wall(68, 525, 120, 575, 1.6, "sling");
+    wall(332, 525, 280, 575, 1.6, "sling");
 
     return w;
   }
 
   function buildBumpers() {
     return [
-      { x: 160, y: 180, r: 16, flash: 0 },
-      { x: 240, y: 180, r: 16, flash: 0 },
-      { x: 200, y: 250, r: 18, flash: 0 },
+      // upper cluster
+      { x: 160, y: 140, r: 15, flash: 0 },
+      { x: 240, y: 140, r: 15, flash: 0 },
+      { x: 200, y: 200, r: 17, flash: 0 },
+      // lower-middle cluster
+      { x: 140, y: 370, r: 14, flash: 0 },
+      { x: 260, y: 370, r: 14, flash: 0 },
+      { x: 200, y: 415, r: 16, flash: 0 },
+    ];
+  }
+
+  // small scoreless pegs that just add extra deflection between the
+  // bumper clusters and the side-flipper rows
+  function buildPegs() {
+    return [
+      { x: 100, y: 320, r: 7, flash: 0 },
+      { x: 300, y: 320, r: 7, flash: 0 },
     ];
   }
 
@@ -131,9 +151,24 @@
 
   function buildFlippers() {
     return {
-      left: makeFlipper("left", { x: 130, y: 560 }),
-      right: makeFlipper("right", { x: 270, y: 560 }),
+      left: makeFlipper("left", { x: 130, y: 630 }),
+      right: makeFlipper("right", { x: 270, y: 630 }),
     };
+  }
+
+  // small paddles mounted on the side walls that sweep back and forth on
+  // their own, in two rows — extra chaos the player doesn't control
+  function makeSideFlipper(pivot, base, phase) {
+    return { pivot: pivot, base: base, phase: phase, length: 55, radius: 9, angle: base, angVel: 0 };
+  }
+
+  function buildSideFlippers() {
+    return [
+      makeSideFlipper({ x: 20, y: 260 }, 0, 0),
+      makeSideFlipper({ x: 380, y: 260 }, Math.PI, 1.0),
+      makeSideFlipper({ x: 20, y: 480 }, 0, 2.1),
+      makeSideFlipper({ x: 380, y: 480 }, Math.PI, 3.4),
+    ];
   }
 
   function closestPointOnSegment(px, py, x1, y1, x2, y2) {
@@ -317,6 +352,15 @@
     rightFlipperBtn.classList.toggle("is-pressed", flippers.right.pressed);
   }
 
+  function updateSideFlippers(dt) {
+    simTime += dt;
+    sideFlippers.forEach(function (f) {
+      var w = SIDE_FLIPPER_SPEED;
+      f.angle = f.base + SIDE_FLIPPER_AMP * Math.sin(w * simTime + f.phase);
+      f.angVel = SIDE_FLIPPER_AMP * w * Math.cos(w * simTime + f.phase);
+    });
+  }
+
   function physicsStep(dt) {
     ball.vy += GRAVITY * dt;
     ball.x += ball.vx * dt;
@@ -347,7 +391,16 @@
       }
     });
 
-    [flippers.left, flippers.right].forEach(function (f) {
+    pegs.forEach(function (p) {
+      var hit = resolveCircleKick(ball, p.x, p.y, p.r, 260);
+      if (hit) {
+        p.flash = performance.now();
+        score += 20;
+        updateHud();
+      }
+    });
+
+    [flippers.left, flippers.right].concat(sideFlippers).forEach(function (f) {
       var tip = {
         x: f.pivot.x + f.length * Math.cos(f.angle),
         y: f.pivot.y + f.length * Math.sin(f.angle),
@@ -368,6 +421,7 @@
 
   function update(dt) {
     updateFlipperPhysics(dt);
+    updateSideFlippers(dt);
     if (state === "live" && ball) {
       var sdt = dt / SUBSTEPS;
       for (var i = 0; i < SUBSTEPS; i++) physicsStep(sdt);
@@ -420,7 +474,16 @@
       ctx.stroke();
     });
 
-    [flippers.left, flippers.right].forEach(function (f) {
+    pegs.forEach(function (p) {
+      var flashT = performance.now() - p.flash;
+      var glow = flashT < 150;
+      ctx.beginPath();
+      ctx.fillStyle = glow ? "#ffffff" : COLOR_TEAL;
+      ctx.arc(p.x, p.y, p.r + (glow ? 2 : 0), 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    [flippers.left, flippers.right].concat(sideFlippers).forEach(function (f) {
       var tip = {
         x: f.pivot.x + f.length * Math.cos(f.angle),
         y: f.pivot.y + f.length * Math.sin(f.angle),

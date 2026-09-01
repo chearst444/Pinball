@@ -60,10 +60,29 @@ html, body {
 
   .tagline { display: none; }
 
+  /* The table grew two extra rows of stuff to bounce off; claw the room
+     back from the chrome around it rather than the table itself. */
+  .topbar { padding-bottom: 6px; gap: 10px; }
+  .brand { gap: 8px; }
+  .brand-icon { width: 26px; height: 26px; }
+  .brand h1 { font-size: 1.05rem; }
+  .trophy { width: 30px; height: 30px; }
+
+  .hud { gap: 16px; }
+  .stat { min-width: 52px; }
+  .stat-label { font-size: 0.6rem; }
+  .stat-value { font-size: 1.15rem; }
+
+  .status { font-size: 0.78rem; min-height: 1em; }
+
+  .flipper-btn { padding: 10px 8px; font-size: 0.78rem; }
+  .launch-btn { padding: 8px 14px; }
+  .controls .btn { padding: 6px 16px; font-size: 0.8rem; }
+
   .playarea {
     flex: 1 1 auto;
     min-height: 0;
-    gap: 8px;
+    gap: 6px;
   }
 
   .table-frame {
@@ -71,10 +90,10 @@ html, body {
     min-height: 0;
     width: 100%;
     max-width: none;
+    padding: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
   }
 
   #tableCanvas {
@@ -84,7 +103,7 @@ html, body {
     max-height: 100%;
   }
 
-  .legend { max-height: 40vh; overflow-y: auto; }
+  .legend { padding: 8px 14px; max-height: 30vh; overflow-y: auto; }
 }
 
 /* ---------- topbar ---------- */
@@ -192,7 +211,7 @@ html, body {
 #tableCanvas {
   display: block;
   width: 100%;
-  aspect-ratio: 400 / 650;
+  aspect-ratio: 400 / 720;
   border-radius: 10px;
   background: var(--ink);
   touch-action: none;
