@@ -1,8 +1,10 @@
-// TILT — a real-physics pinball table built on canvas, in the game's
-// ink / yellow / magenta / teal palette. A ball with gravity bounces off
-// walls, magenta bumpers, and yellow slingshots; two yellow flippers
-// (rotating capsules driven by keys, on-screen buttons, or taps on the
-// table itself) are the only thing standing between the ball and the drain.
+// TILT — a real-physics pinball table built on canvas, styled after a
+// classic chrome-cabinet machine. A ball with gravity bounces off chrome
+// rails, cyan/red/gold numbered bumpers, white standup targets, and
+// yellow slingshots; two yellow flippers (rotating capsules driven by
+// keys, on-screen buttons, or taps on the table itself) are the only
+// thing standing between the ball and the drain — save for a lucky
+// dead-center "Shoot Again" kickback.
 
 (function () {
   "use strict";
@@ -28,10 +30,36 @@
   // ---------- colors (mirrors css/style.css :root) ----------
   var COLOR_INK = "#101018";
   var COLOR_YELLOW = "#f8e060";
-  var COLOR_MAGENTA = "#d840b8";
-  var COLOR_TEAL = "#60d0c0";
   var COLOR_ORANGE = "#f2994a"; // side paddles — deliberately not flipper-yellow
-  var COLOR_TABLE_BG = "#0c0c14";
+  var COLOR_WHITE = "#f2f0e8"; // standup targets
+  var COLOR_CHROME_HI = "#eef3f6";
+  var COLOR_CHROME_LO = "#7c8894";
+
+  // classic-cabinet bumper hues, cyan / red / gold like the reference photo
+  var BUMPER_STYLES = {
+    cyan: { hi: "#7fe6f2", lo: "#0f7a92" },
+    red: { hi: "#ff8a80", lo: "#9c1c1c" },
+    gold: { hi: "#ffe08a", lo: "#b8790f" },
+  };
+
+  // standup-target sprite — the actual platform_narrow.png shape shared
+  // across this repo's sibling games, recolored white to match the photo
+  var standupSprite = null;
+  (function loadStandupSprite() {
+    var img = new Image();
+    img.onload = function () {
+      var off = document.createElement("canvas");
+      off.width = img.width;
+      off.height = img.height;
+      var octx = off.getContext("2d");
+      octx.drawImage(img, 0, 0);
+      octx.globalCompositeOperation = "source-in";
+      octx.fillStyle = COLOR_WHITE;
+      octx.fillRect(0, 0, off.width, off.height);
+      standupSprite = off;
+    };
+    img.src = "assets/platform_narrow.png";
+  })();
 
   // ---------- logical table geometry (fixed virtual units) ----------
   var W = 400;
@@ -53,6 +81,8 @@
   var state = "idle"; // 'idle' | 'live' | 'over'
   var ball = null;
   var lastT = null;
+  var stuckWatch = { t: 0, bestY: 0, windowStartY: 0 }; // catches an abandoned ball going nowhere
+  var lastInputAt = 0; // performance.now() of the last flipper press, for the watchdog below
 
   var activators = { left: new Set(), right: new Set() };
   var pointerSides = {}; // pointerId -> 'left' | 'right'
@@ -60,8 +90,11 @@
   var walls = buildWalls();
   var bumpers = buildBumpers();
   var pegs = buildPegs();
+  var shootAgain = buildShootAgain();
   var flippers = buildFlippers();
   var sideFlippers = buildSideFlippers();
+  var chevrons = buildChevrons();
+  var tableBgGradient = null; // built lazily once ctx is in hand
 
   // ---------- geometry helpers ----------
 
@@ -105,26 +138,37 @@
     return w;
   }
 
+  // cyan/red/gold trio with real point values printed on the target,
+  // same arrangement (two up top, one centered below) both clusters
   function buildBumpers() {
     return [
       // upper cluster
-      { x: 160, y: 140, r: 15, flash: 0 },
-      { x: 240, y: 140, r: 15, flash: 0 },
-      { x: 200, y: 200, r: 17, flash: 0 },
+      { x: 160, y: 140, r: 15, style: "cyan", value: 25, flash: 0 },
+      { x: 240, y: 140, r: 15, style: "red", value: 100, flash: 0 },
+      { x: 200, y: 200, r: 17, style: "gold", value: 50, flash: 0 },
       // lower-middle cluster
-      { x: 140, y: 370, r: 14, flash: 0 },
-      { x: 260, y: 370, r: 14, flash: 0 },
-      { x: 200, y: 415, r: 16, flash: 0 },
+      { x: 140, y: 370, r: 14, style: "cyan", value: 25, flash: 0 },
+      { x: 260, y: 370, r: 14, style: "red", value: 100, flash: 0 },
+      { x: 200, y: 415, r: 16, style: "gold", value: 50, flash: 0 },
     ];
   }
 
-  // small scoreless pegs that just add extra deflection between the
-  // bumper clusters and the side-flipper rows
+  // small white standup targets between the bumper clusters and the
+  // side-flipper rows — worth a little less than a bumper
   function buildPegs() {
     return [
-      { x: 100, y: 320, r: 7, flash: 0 },
-      { x: 300, y: 320, r: 7, flash: 0 },
+      { x: 100, y: 320, r: 9, value: 20, flash: 0 },
+      { x: 300, y: 320, r: 9, value: 20, flash: 0 },
     ];
+  }
+
+  // center "shoot again" kickback sitting in the drain gap — a rare save
+  // if the ball falls dead-center, like the lit target on a real table.
+  // Small and set well below the flippers' resting reach (~676) so it
+  // only catches a ball that has actually gotten past them, not one
+  // that's merely bouncing between the two resting flipper tips.
+  function buildShootAgain() {
+    return { x: 200, y: 700, r: 7, value: 250, flash: 0 };
   }
 
   function makeFlipper(side, pivot) {
@@ -180,6 +224,19 @@
     ];
   }
 
+  // purely decorative direction chevrons climbing the outer lanes, like
+  // the arrow rows on a real cabinet — no collision, just flavor
+  function buildChevrons() {
+    var rows = [100, 170, 345, 545];
+    var list = [];
+    rows.forEach(function (y, i) {
+      var color = i % 2 === 0 ? COLOR_YELLOW : COLOR_ORANGE;
+      list.push({ x: 34, y: y, color: color });
+      list.push({ x: 366, y: y, color: color });
+    });
+    return list;
+  }
+
   function closestPointOnSegment(px, py, x1, y1, x2, y2) {
     var dx = x2 - x1;
     var dy = y2 - y1;
@@ -228,9 +285,20 @@
     b.x = cx + nx * minDist;
     b.y = cy + ny * minDist;
 
-    var speed = Math.max(kickSpeed, Math.hypot(b.vx, b.vy) * 1.2);
-    b.vx = nx * speed;
-    b.vy = ny * speed;
+    // Two things used to let the ball get trapped bouncing forever in a
+    // dense bumper cluster: (1) a perfectly fixed-speed kick straight back
+    // along the normal can lock into an exact repeating loop between two
+    // kickers, and (2) scaling the kick up to 1.2x the incoming speed only
+    // ever added energy on every hit, with nothing to bleed it back off —
+    // a ball bouncing rapidly between bumpers would ratchet up to top
+    // speed and stay there, never slow enough for gravity to pull it clear
+    // between hits. Kick at a flat speed (small jitter only, no incoming-
+    // speed amplification) and jitter the angle too.
+    var jitter = (Math.random() - 0.5) * 0.5; // ~±14 degrees
+    var ang = Math.atan2(ny, nx) + jitter;
+    var speed = kickSpeed * (0.92 + Math.random() * 0.16);
+    b.vx = Math.cos(ang) * speed;
+    b.vy = Math.sin(ang) * speed;
     return true;
   }
 
@@ -266,6 +334,9 @@
   function spawnBall() {
     ball = { x: SPAWN.x, y: SPAWN.y, vx: 0, vy: 0, r: BALL_R };
     state = "idle";
+    stuckWatch.t = 0;
+    stuckWatch.bestY = SPAWN.y;
+    stuckWatch.windowStartY = SPAWN.y;
   }
 
   function doLaunch() {
@@ -379,7 +450,7 @@
       var hit = resolveCircleKick(ball, b.x, b.y, b.r, 420);
       if (hit) {
         b.flash = performance.now();
-        score += 100;
+        score += b.value;
         updateHud();
       }
     });
@@ -388,10 +459,26 @@
       var hit = resolveCircleKick(ball, p.x, p.y, p.r, 260);
       if (hit) {
         p.flash = performance.now();
-        score += 20;
+        score += p.value;
         updateHud();
       }
     });
+
+    // "shoot again" kickback sitting in the drain gap — a strong straight
+    // launch back into play instead of a generic radial bounce, like a
+    // real kickback target, plus a solid score for the rare dead-center save
+    var dxSA = ball.x - shootAgain.x;
+    var dySA = ball.y - shootAgain.y;
+    if (Math.hypot(dxSA, dySA) < ball.r + shootAgain.r) {
+      shootAgain.flash = performance.now();
+      score += shootAgain.value;
+      updateHud();
+      ball.x = shootAgain.x;
+      ball.y = shootAgain.y - shootAgain.r - ball.r;
+      ball.vx = Math.random() * 60 - 30;
+      ball.vy = -820;
+      statusLine.textContent = "Shoot Again! +" + shootAgain.value;
+    }
 
     [flippers.left, flippers.right].concat(sideFlippers).forEach(function (f) {
       var tip = {
@@ -417,21 +504,122 @@
     if (state === "live" && ball) {
       var sdt = dt / SUBSTEPS;
       for (var i = 0; i < SUBSTEPS; i++) physicsStep(sdt);
-      if (ball.y - ball.r > H) loseBall();
+      if (ball.y - ball.r > H) { loseBall(); return; }
+
+      // Safety net for an abandoned ball: a resting (unpressed) flipper is
+      // a legitimate solid obstacle, same as a real machine, so this must
+      // never fire on a ball a player is actively contesting — even a
+      // long bumper-camping rally that makes no downward progress at all
+      // is exactly what should happen there. It only engages once BOTH
+      // (a) the deepest point reached hasn't advanced across a full 2.5s
+      // window, and (b) no flipper has been pressed in 3+ seconds — i.e.
+      // the ball has genuinely been left to bounce with nobody playing it.
+      stuckWatch.bestY = Math.max(stuckWatch.bestY, ball.y);
+      stuckWatch.t += dt;
+      if (stuckWatch.t > 2.5) {
+        var noProgress = stuckWatch.bestY - stuckWatch.windowStartY < 20;
+        var abandoned = performance.now() - lastInputAt > 3000;
+        if (noProgress && abandoned) {
+          loseBall();
+          return;
+        }
+        stuckWatch.windowStartY = stuckWatch.bestY;
+        stuckWatch.t = 0;
+      }
     }
   }
 
   // ---------- rendering ----------
 
+  function drawChevron(x, y, color) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - 7);
+    ctx.lineTo(x + 6, y + 5);
+    ctx.lineTo(x - 6, y + 5);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function drawStandupTarget(p, glow) {
+    var w = 11, h = 44;
+    if (standupSprite) {
+      ctx.save();
+      if (glow) {
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 8;
+      }
+      ctx.drawImage(standupSprite, p.x - w / 2, p.y - h / 2, w, h);
+      ctx.restore();
+      return;
+    }
+    // fallback shape while the sprite is still loading
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = glow ? "#ffffff" : COLOR_WHITE;
+    ctx.strokeStyle = "#b9b6ac";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBumper(b) {
+    var flashT = performance.now() - b.flash;
+    var glow = flashT < 150;
+    var style = BUMPER_STYLES[b.style];
+    var grad = ctx.createRadialGradient(
+      b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.15,
+      b.x, b.y, b.r
+    );
+    if (glow) {
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(1, style.hi);
+    } else {
+      grad.addColorStop(0, style.hi);
+      grad.addColorStop(1, style.lo);
+    }
+    ctx.beginPath();
+    ctx.fillStyle = grad;
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#ffffff";
+    ctx.globalAlpha = 0.6;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "700 " + Math.round(b.r * 0.62) + "px \"Segoe UI\", sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(b.value), b.x, b.y + 1);
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = COLOR_TABLE_BG;
+
+    if (!tableBgGradient) {
+      tableBgGradient = ctx.createRadialGradient(200, 160, 30, 200, 500, 480);
+      tableBgGradient.addColorStop(0, "#1c4a7a");
+      tableBgGradient.addColorStop(0.55, "#123159");
+      tableBgGradient.addColorStop(1, "#081a30");
+    }
+    ctx.fillStyle = tableBgGradient;
     ctx.fillRect(0, 0, W, H);
 
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    ctx.strokeStyle = COLOR_TEAL;
+    chevrons.forEach(function (c) { drawChevron(c.x, c.y, c.color); });
+
+    var chromeGrad = ctx.createLinearGradient(0, 0, W, 0);
+    chromeGrad.addColorStop(0, COLOR_CHROME_LO);
+    chromeGrad.addColorStop(0.5, COLOR_CHROME_HI);
+    chromeGrad.addColorStop(1, COLOR_CHROME_LO);
+    ctx.strokeStyle = chromeGrad;
     ctx.lineWidth = 6;
     walls.forEach(function (seg) {
       if (seg.kind === "sling") return;
@@ -452,28 +640,33 @@
       ctx.stroke();
     });
 
-    bumpers.forEach(function (b) {
-      var flashT = performance.now() - b.flash;
-      var glow = flashT < 150;
-      ctx.beginPath();
-      ctx.fillStyle = glow ? "#ffffff" : COLOR_MAGENTA;
-      ctx.arc(b.x, b.y, b.r + (glow ? 3 : 0), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.strokeStyle = COLOR_TEAL;
-      ctx.lineWidth = 3;
-      ctx.arc(b.x, b.y, b.r * 0.55, 0, Math.PI * 2);
-      ctx.stroke();
-    });
+    bumpers.forEach(drawBumper);
 
     pegs.forEach(function (p) {
       var flashT = performance.now() - p.flash;
-      var glow = flashT < 150;
-      ctx.beginPath();
-      ctx.fillStyle = glow ? "#ffffff" : COLOR_TEAL;
-      ctx.arc(p.x, p.y, p.r + (glow ? 2 : 0), 0, Math.PI * 2);
-      ctx.fill();
+      drawStandupTarget(p, flashT < 150);
     });
+
+    // shoot-again kickback — a small lit red/white bullseye deep in the
+    // drain gap, too small at this scale for its own label to read
+    (function () {
+      var flashT = performance.now() - shootAgain.flash;
+      var glow = flashT < 220;
+      var grad = ctx.createRadialGradient(
+        shootAgain.x, shootAgain.y, 0.5,
+        shootAgain.x, shootAgain.y, shootAgain.r
+      );
+      grad.addColorStop(0, glow ? "#ffffff" : "#ff5a4d");
+      grad.addColorStop(0.6, "#c81e1e");
+      grad.addColorStop(1, "#7a0f0f");
+      ctx.beginPath();
+      ctx.fillStyle = grad;
+      ctx.arc(shootAgain.x, shootAgain.y, shootAgain.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+    })();
 
     [flippers.left, flippers.right].concat(sideFlippers).forEach(function (f) {
       var tip = {
@@ -504,10 +697,13 @@
       ctx.fillStyle = grad;
       ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
       ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(8, 20, 38, 0.5)";
+      ctx.stroke();
     }
 
     if (state === "idle") {
-      ctx.fillStyle = "rgba(249, 230, 96, 0.85)";
+      ctx.fillStyle = "rgba(249, 230, 96, 0.9)";
       ctx.font = "600 13px \"Segoe UI\", sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("TAP LAUNCH ↓", 200, 90);
@@ -530,6 +726,7 @@
   function press(side, id) {
     activators[side].add(id);
     flippers[side].pressed = true;
+    lastInputAt = performance.now();
   }
 
   function release(side, id) {

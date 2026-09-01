@@ -1,9 +1,13 @@
 :root {
   --ink: #101018;
   --yellow: #f8e060;
-  --magenta: #d840b8;
   --teal: #60d0c0;
   --orange: #f2994a;
+  --white-target: #f2f0e8;
+  --chrome-hi: #eef3f6;
+  --chrome-lo: #7c8894;
+  --red: #e6392f;
+  --red-dark: #9c1c1c;
 
   --page-bg: #08080d;
   --panel-bg: #16161f;
@@ -142,9 +146,9 @@ html, body {
 
 .table-frame {
   padding: 10px;
-  background: var(--teal);
+  background: linear-gradient(155deg, var(--chrome-hi) 0%, var(--chrome-lo) 45%, var(--chrome-hi) 55%, #4d545c 100%);
   border-radius: 18px;
-  box-shadow: 0 0 0 2px var(--teal), 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 2px #3a3f45, 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.6);
   width: min(92vw, 440px);
 }
 
@@ -191,6 +195,17 @@ html, body {
 }
 
 .launch-btn { flex: none; padding: 10px 18px; }
+
+/* #launchBtn (id) intentionally outranks .btn.primary's teal so this one
+   button reads as the "shoot" control, like the reference photo's red
+   shoot-again target. */
+#launchBtn {
+  background: linear-gradient(180deg, #ff6a5c, var(--red) 55%, var(--red-dark));
+  border-color: var(--red-dark);
+  color: #fff5f0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset, 0 3px 8px rgba(230, 57, 47, 0.4);
+}
+#launchBtn:hover { background: linear-gradient(180deg, #ff8477, #f0453a 55%, var(--red-dark)); }
 
 /* ---------- controls ---------- */
 
@@ -245,9 +260,12 @@ html, body {
 }
 .swatch-ink { background: var(--ink); border: 1px solid var(--teal); }
 .swatch-yellow { background: var(--yellow); }
-.swatch-magenta { background: var(--magenta); }
 .swatch-teal { background: var(--teal); }
 .swatch-orange { background: var(--orange); }
+.swatch-white { background: var(--white-target); }
+.swatch-red { background: var(--red); }
+.swatch-cyan { background: #4fd6e8; }
+.swatch-gold { background: #f0b93c; }
 
 /* ---------- solved overlay ---------- */
 
