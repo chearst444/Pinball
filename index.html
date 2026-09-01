@@ -5,8 +5,74 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Vault Bumper</title>
 <link rel="stylesheet" href="css/style.css">
+<style>
+
+        #sq-open {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: #0a0a0a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        #sq-open.is-off { display: none !important; }
+        #sq-open .sq-stage {
+            position: relative;
+            width: min(100%, 1400px);
+            max-height: 100%;
+            max-height: 100dvh;
+        }
+        #sq-open .sq-art {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 100dvh;
+            object-fit: contain;
+        }
+        #sq-open.pixel .sq-art {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        #sq-open .sq-play {
+            position: absolute;
+            left: 50%;
+            bottom: 8%;
+            transform: translateX(-50%);
+            background: none;
+            border: 0;
+            padding: 12px 16px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        #sq-open .sq-play img {
+            display: block;
+            width: 276px;
+            height: 87px;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            image-rendering: -moz-crisp-edges;
+            pointer-events: none;
+        }
+        @media (max-width: 640px) {
+            #sq-open .sq-play img { width: 184px; height: 58px; }
+        }
+
+</style>
 </head>
 <body>
+<div id="sq-open" role="dialog" aria-modal="true" aria-label="Pinball">
+  <div class="sq-stage">
+    <img class="sq-art" src="assets/opening.jpg" alt="Pinball">
+    <button type="button" class="sq-play" id="sq-play" aria-label="Play">
+      <img src="assets/btn_play.png" alt="PLAY" width="92" height="29">
+    </button>
+  </div>
+</div>
+
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -65,5 +131,25 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
   <script src="js/game.js"></script>
+
+<script>
+(function () {
+  var overlay = document.getElementById('sq-open');
+  var btn = document.getElementById('sq-play');
+  if (!overlay || !btn) return;
+  function start(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    overlay.classList.add('is-off');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.dispatchEvent(new CustomEvent('sq-play'));
+  }
+  btn.addEventListener('click', start);
+  window.addEventListener('keydown', function (e) {
+    if (overlay.classList.contains('is-off')) return;
+    if (e.code === 'Enter' || e.code === 'Space') start(e);
+  });
+})();
+</script>
+
 </body>
 </html>
