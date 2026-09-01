@@ -35,7 +35,6 @@ html, body {
     grid-template-columns: 1fr 260px;
     align-items: start;
   }
-  .topbar { grid-column: 1 / -1; }
 }
 
 /* Below the desktop breakpoint the whole game is one column that must fit
@@ -55,20 +54,12 @@ html, body {
     overflow: hidden;
   }
 
-  .topbar, .hud, .status, .flipper-controls, .controls, .legend {
+  .hud, .status, .flipper-controls, .controls, .legend {
     flex: none;
   }
 
-  .tagline { display: none; }
-
-  /* The table grew two extra rows of stuff to bounce off; claw the room
-     back from the chrome around it rather than the table itself. */
-  .topbar { padding-bottom: 6px; gap: 10px; }
-  .brand { gap: 8px; }
-  .brand-icon { width: 26px; height: 26px; }
-  .brand h1 { font-size: 1.05rem; }
-  .trophy { width: 30px; height: 30px; }
-
+  /* Claw room back from the chrome around the table rather than the
+     table itself. */
   .hud { gap: 16px; }
   .stat { min-width: 52px; }
   .stat-label { font-size: 0.6rem; }
@@ -105,58 +96,6 @@ html, body {
   }
 
   .legend { padding: 8px 14px; max-height: 30vh; overflow-y: auto; }
-}
-
-/* ---------- topbar ---------- */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid var(--teal);
-}
-
-.brand { display: flex; align-items: center; gap: 14px; }
-
-.brand-icon {
-  width: 36px;
-  height: 36px;
-  flex: none;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #ffffff, var(--teal) 55%, #2c8f84 100%);
-  box-shadow: inset 0 -4px 6px rgba(0, 0, 0, 0.3);
-}
-
-.brand h1 {
-  margin: 0;
-  font-size: 1.4rem;
-  letter-spacing: 0.12em;
-  color: var(--yellow);
-}
-
-.tagline {
-  margin: 2px 0 0;
-  font-size: 0.85rem;
-  color: var(--text-dim);
-}
-
-.trophy { position: relative; width: 40px; height: 40px; flex: none; }
-.trophy img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  transition: transform 0.4s ease, opacity 0.4s ease;
-}
-.trophy.pop img#trophyUnlocked { animation: trophy-pop 0.6s ease; }
-
-@keyframes trophy-pop {
-  0% { transform: scale(0.2) rotate(-40deg); opacity: 0; }
-  60% { transform: scale(1.25) rotate(10deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 /* ---------- hud / stats ---------- */

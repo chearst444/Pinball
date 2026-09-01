@@ -21,9 +21,6 @@
   var gameOverLine = document.getElementById("gameOverLine");
   var playAgainBtn = document.getElementById("playAgainBtn");
   var starBurst = document.getElementById("starBurst");
-  var trophySlot = document.getElementById("trophySlot");
-  var trophyLocked = document.getElementById("trophyLocked");
-  var trophyUnlocked = document.getElementById("trophyUnlocked");
   var legendDetails = document.getElementById("legendDetails");
 
   var STORAGE_KEY = "tilt-best-score";
@@ -259,12 +256,6 @@
     bestValue.textContent = b === null ? "—" : String(b);
   }
 
-  function resetTrophy() {
-    trophySlot.classList.remove("pop");
-    trophyLocked.hidden = false;
-    trophyUnlocked.hidden = true;
-  }
-
   // ---------- game flow ----------
 
   function updateHud() {
@@ -302,10 +293,6 @@
     var isNewBest = maybeSaveBest(score);
     renderBest();
 
-    trophySlot.classList.toggle("pop", isNewBest);
-    trophyLocked.hidden = isNewBest;
-    trophyUnlocked.hidden = !isNewBest;
-
     gameOverLine.textContent = "Final score " + score + "." + (isNewBest ? " New best!" : "");
     statusLine.textContent = "Game over.";
 
@@ -317,7 +304,6 @@
     score = 0;
     ballsLeft = TOTAL_BALLS;
     gameOverOverlay.hidden = true;
-    resetTrophy();
     renderBest();
     updateHud();
     spawnBall();
