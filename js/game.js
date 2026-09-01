@@ -24,6 +24,7 @@
   var trophySlot = document.getElementById("trophySlot");
   var trophyLocked = document.getElementById("trophyLocked");
   var trophyUnlocked = document.getElementById("trophyUnlocked");
+  var legendDetails = document.getElementById("legendDetails");
 
   var STORAGE_KEY = "tilt-best-score";
 
@@ -537,6 +538,19 @@
   restartBtn.addEventListener("click", newGame);
   playAgainBtn.addEventListener("click", newGame);
   window.addEventListener("resize", fitCanvas);
+
+  // "How to play" starts open on desktop (room to spare) and closed on
+  // phones (every bit of vertical space matters there). Only react when
+  // the viewport actually crosses the breakpoint, so a manual toggle on
+  // mobile doesn't get clobbered by an unrelated resize.
+  var desktopQuery = window.matchMedia("(min-width: 780px)");
+  var syncLegendOpen = function (e) { legendDetails.open = e.matches; };
+  syncLegendOpen(desktopQuery);
+  if (desktopQuery.addEventListener) {
+    desktopQuery.addEventListener("change", syncLegendOpen);
+  } else if (desktopQuery.addListener) {
+    desktopQuery.addListener(syncLegendOpen); // older Safari
+  }
 
   // ---------- main loop ----------
 
